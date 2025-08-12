@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, timestamp, text, integer, decimal, boolean, pgEnum, index, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, uuid, varchar, timestamp, text, integer, decimal, boolean, pgEnum, index, primaryKey, jsonb } from "drizzle-orm/pg-core";
 import { relations, InferModel } from "drizzle-orm";
 
 // =============================
@@ -171,12 +171,21 @@ export const subscriptions = pgTable("subscriptions", {
 // =============================
 // ACTIVITY LOGS
 // =============================
-export const activityLogs = pgTable("activity_logs", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => users.id),
-  action: varchar("action", { length: 150 }).notNull(),
-  details: text("details"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+export const activityLogs = pgTable('activity_logs', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  timestamp: timestamp('timestamp').defaultNow(),
+  userId: uuid('user_id'),
+  entityType: varchar('entity_type', { length: 50 }),
+  entityId: varchar('entity_id', { length: 36 }),
+  action: varchar('action', { length: 50 }),
+  method: varchar('method', { length: 10 }),
+  endpoint: text('endpoint'),
+  statusCode: integer('status_code'),
+  description: text('description'),
+  metadata: jsonb('metadata'),
+  ipAddress: varchar('ip_address', { length: 45 }),
+  userAgent: text('user_agent'),
+  responseTime: integer('response_time'), // ms
 });
 
 // =============================
