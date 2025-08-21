@@ -20,6 +20,16 @@ export const billingIntervalEnum = pgEnum("billing_interval", [
   "monthly", "quarterly", "yearly"
 ]);
 
+
+
+export const refreshTokens = pgTable("refresh_tokens", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // =============================
 // USERS
 // =============================
@@ -269,3 +279,6 @@ export type NewPropertyAmenity = InferModel<typeof propertyAmenities, "insert">;
 
 export type UnitAmenity = InferModel<typeof unitAmenities>;
 export type NewUnitAmenity = InferModel<typeof unitAmenities, "insert">;
+
+export type TRefreshTokensInsert = InferModel<typeof refreshTokens, "insert">;
+export type TRefreshTokensSelect = InferModel<typeof refreshTokens>;
