@@ -1,12 +1,29 @@
 // auth.route.ts
 import { Router } from "express";
-import { createUser, loginUser, passwordReset, updatePassword } from "./auth.controller";
-import { validateRequest } from "./auth.schema";
-import { createUserSchema, loginSchema, passwordResetRequestSchema, passwordResetConfirmSchema } from "./auth.schema";
+import {
+  register,
+  login,
+  logout,
+  refreshToken,
+  getCurrentUser,
+  forgotPassword,
+  resetPassword,
+  changePassword,
+} from "./auth.controller";
+import { authenticateToken } from "../middleware/auth.middleware";
 
 export const authRouter = Router();
 
-authRouter.post("/register", validateRequest(createUserSchema), createUser);
-authRouter.post("/login", validateRequest(loginSchema), loginUser);
-authRouter.post("/forgot-password", validateRequest(passwordResetRequestSchema), passwordReset);
-authRouter.put("/password-reset/:token", validateRequest(passwordResetConfirmSchema), updatePassword);
+// Public routes
+authRouter.post("/register", register);
+authRouter.post("/login", login);
+authRouter.post("/refresh-token", refreshToken);
+authRouter.post("/forgot-password", forgotPassword);
+authRouter.post("/reset-password", resetPassword);
+
+// Protected routes
+authRouter.post("/logout", authenticateToken, logout);
+authRouter.get("/me", authenticateToken, getCurrentUser);
+authRouter.post("/change-password", authenticateToken, changePassword);
+
+export default authRouter;

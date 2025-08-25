@@ -1,239 +1,701 @@
-import { pgTable, uuid, varchar, timestamp, text, integer, decimal, boolean, pgEnum, index, primaryKey, jsonb } from "drizzle-orm/pg-core";
-import { relations, InferModel } from "drizzle-orm";
+// schema.ts
+import {
+  pgTable,
+  pgEnum,
+  uuid,
+  varchar,
+  text,
+  boolean,
+  timestamp,
+  integer,
+  numeric,
+  jsonb,
+  primaryKey,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 
-// =============================
-// ENUMS
-// =============================
-export const userRoleEnum = pgEnum("user_role", [
-  "tenant", "property_owner", "manager", "caretaker", "admin", "super_admin"
+// ---------- Enums (CamelCase) ----------
+export const userRoleEnum = pgEnum("userRoleEnum", [
+  "tenant",
+  "caretaker",
+  "admin",
+  "superAdmin",
+  "propertyOwner",
+  "manager",
 ]);
 
-export const ticketStatusEnum = pgEnum("ticket_status", [
-  "open", "in_progress", "resolved", "closed"
+export const unitStatusEnum = pgEnum("unitStatusEnum", [
+  "vacant",
+  "reserved",
+  "occupied",
+  "unavailable",
 ]);
 
-export const paymentStatusEnum = pgEnum("payment_status", [
-  "pending", "completed", "failed", "refunded"
+export const leaseStatusEnum = pgEnum("leaseStatusEnum", [
+  "draft",
+  "active",
+  "pendingMoveIn",
+  "ended",
+  "terminated",
+  "cancelled",
 ]);
 
-export const billingIntervalEnum = pgEnum("billing_interval", [
-  "monthly", "quarterly", "yearly"
+export const invoiceStatusEnum = pgEnum("invoiceStatusEnum", [
+  "draft",
+  "issued",
+  "partiallyPaid",
+  "paid",
+  "void",
+  "overdue",
 ]);
 
+export const paymentMethodEnum = pgEnum("paymentMethodEnum", [
+  "cash",
+  "mpesa",
+  "bankTransfer",
+  "card",
+  "cheque",
+  "other",
+]);
 
+export const paymentStatusEnum = pgEnum("paymentStatusEnum", [
+  "pending",
+  "completed",
+  "failed",
+  "refunded",
+  "cancelled",
+]);
 
-export const refreshTokens = pgTable("refresh_tokens", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  token: text("token").notNull().unique(),
-  expiresAt: timestamp("expires_at").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const maintenanceStatusEnum = pgEnum("maintenanceStatusEnum", [
+  "open",
+  "inProgress",
+  "onHold",
+  "resolved",
+  "closed",
+  "cancelled",
+]);
 
-// =============================
-// USERS
-// =============================
-export const users = pgTable("users", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  email: varchar("email", { length: 150 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  role: userRoleEnum("role").notNull().default("tenant"),
-  phone: varchar("phone", { length: 20 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-}, (t) => ({
-  emailIdx: index("idx_users_email").on(t.email),
-}));
+export const priorityEnum = pgEnum("priorityEnum", ["low", "medium", "high", "urgent"]);
 
-// =============================
-// PROPERTIES
-// =============================
-export const properties = pgTable("properties", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  ownerId: uuid("owner_id").references(() => users.id).notNull(),
-  managerId: uuid("manager_id").references(() => users.id),
-  name: varchar("name", { length: 150 }).notNull(),
-  address: text("address").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-}, (t) => ({
-  ownerIdx: index("idx_properties_owner").on(t.ownerId),
-}));
+export const activityActionEnum = pgEnum("activityActionEnum", [
+  "create",
+  "update",
+  "delete",
+  "statusChange",
+  "assign",
+  "unassign",
+  "comment",
+  "payment",
+  "issueInvoice",
+  "voidInvoice",
+]);
 
-// =============================
-// UNITS
-// =============================
-export const units = pgTable("units", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  propertyId: uuid("property_id").references(() => properties.id).notNull(),
-  name: varchar("name", { length: 100 }).notNull(),
-  type: varchar("type", { length: 50 }), // e.g. Apartment, Studio
-  rentAmount: decimal("rent_amount", { precision: 10, scale: 2 }).notNull(),
-  isOccupied: boolean("is_occupied").default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-}, (t) => ({
-  propertyIdx: index("idx_units_property").on(t.propertyId),
-}));
+// ---------- Authentication Tables ----------
+export const userAuth = pgTable(
+  "userAuth",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 320 }).notNull(),
+    passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+    isEmailVerified: boolean("isEmailVerified").notNull().default(false),
+    lastLoginAt: timestamp("lastLoginAt", { withTimezone: true }),
+    verificationToken: varchar("verificationToken", { length: 255 }),
+    resetToken: varchar("resetToken", { length: 255 }),
+    resetTokenExpiresAt: timestamp("resetTokenExpiresAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("userAuth_email_unique").on(t.email),
+    uniqueIndex("userAuth_userId_unique").on(t.userId),
+    index("userAuth_verificationToken_index").on(t.verificationToken),
+    index("userAuth_resetToken_index").on(t.resetToken),
+  ]
+);
 
-// =============================
-// AMENITIES
-// =============================
-export const amenities = pgTable("amenities", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 100 }).notNull().unique(),
-  description: text("description"),
-  icon: varchar("icon", { length: 50 }),
-  isPropertyAmenity: boolean("is_property_amenity").default(false),
-  isUnitAmenity: boolean("is_unit_amenity").default(false),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const refreshTokens = pgTable(
+  "refreshTokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: varchar("token", { length: 512 }).notNull(),
+    deviceId: varchar("deviceId", { length: 255 }),
+    userAgent: varchar("userAgent", { length: 512 }),
+    ipAddress: varchar("ipAddress", { length: 45 }),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    isRevoked: boolean("isRevoked").notNull().default(false),
+    revokedAt: timestamp("revokedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("refreshTokens_token_unique").on(t.token),
+    index("refreshTokens_userId_index").on(t.userId),
+    index("refreshTokens_deviceId_index").on(t.deviceId),
+    index("refreshTokens_expiresAt_index").on(t.expiresAt),
+    index("refreshTokens_isRevoked_index").on(t.isRevoked),
+  ]
+);
 
-// Property Amenities (Many-to-Many)
-export const propertyAmenities = pgTable("property_amenities", {
-  propertyId: uuid("property_id").references(() => properties.id).notNull(),
-  amenityId: uuid("amenity_id").references(() => amenities.id).notNull(),
-}, (t) => ({
-  pk: primaryKey(t.propertyId, t.amenityId),
-}));
+// ---------- Core: Users & Organizations ----------
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    fullName: varchar("fullName", { length: 256 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    phone: varchar("phone", { length: 64 }),
+    isActive: boolean("isActive").notNull().default(true),
+    avatarUrl: varchar("avatarUrl", { length: 1024 }),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("users_email_unique").on(t.email),
+    index("users_phone_index").on(t.phone),
+  ]
+);
 
-// Unit Amenities (Many-to-Many)
-export const unitAmenities = pgTable("unit_amenities", {
-  unitId: uuid("unit_id").references(() => units.id).notNull(),
-  amenityId: uuid("amenity_id").references(() => amenities.id).notNull(),
-}, (t) => ({
-  pk: primaryKey(t.unitId, t.amenityId),
-}));
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: varchar("name", { length: 256 }).notNull(),
+    legalName: varchar("legalName", { length: 256 }),
+    taxId: varchar("taxId", { length: 64 }),
+    isActive: boolean("isActive").notNull().default(true),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("organizations_name_unique").on(t.name),
+  ]
+);
 
-// =============================
-// LEASES
-// =============================
-export const leases = pgTable("leases", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  tenantId: uuid("tenant_id").references(() => users.id).notNull(),
-  unitId: uuid("unit_id").references(() => units.id).notNull(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date").notNull(),
-  rentAmount: decimal("rent_amount", { precision: 10, scale: 2 }).notNull(),
-  depositAmount: decimal("deposit_amount", { precision: 10, scale: 2 }),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-}, (t) => ({
-  tenantIdx: index("idx_leases_tenant").on(t.tenantId),
-}));
+export const userOrganizations = pgTable(
+  "userOrganizations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    role: userRoleEnum("role").notNull().default("tenant"),
+    isPrimary: boolean("isPrimary").notNull().default(false),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("userOrganizations_userId_organizationId_unique").on(
+      t.userId,
+      t.organizationId
+    ),
+    index("userOrganizations_role_index").on(t.role),
+  ]
+);
 
-// =============================
-// PAYMENTS
-// =============================
-export const payments = pgTable("payments", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  leaseId: uuid("lease_id").references(() => leases.id).notNull(),
-  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
-  status: paymentStatusEnum("status").notNull().default("pending"),
-  method: varchar("method", { length: 50 }), // e.g. M-Pesa, Bank
-  paidAt: timestamp("paid_at"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+// ---------- Properties, Units, Amenities ----------
+export const properties = pgTable(
+  "properties",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 256 }).notNull(),
+    description: text("description"),
+    addressLine1: varchar("addressLine1", { length: 256 }),
+    addressLine2: varchar("addressLine2", { length: 256 }),
+    city: varchar("city", { length: 128 }),
+    state: varchar("state", { length: 128 }),
+    postalCode: varchar("postalCode", { length: 32 }),
+    country: varchar("country", { length: 128 }),
+    timezone: varchar("timezone", { length: 64 }),
+    isActive: boolean("isActive").notNull().default(true),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("properties_organizationId_name_unique").on(
+      t.organizationId,
+      t.name
+    ),
+    index("properties_organizationId_index").on(t.organizationId),
+  ]
+);
 
-// =============================
-// TICKETS
-// =============================
-export const tickets = pgTable("tickets", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  createdById: uuid("created_by_id").references(() => users.id).notNull(),
-  propertyId: uuid("property_id").references(() => properties.id),
-  unitId: uuid("unit_id").references(() => units.id),
-  title: varchar("title", { length: 150 }).notNull(),
-  description: text("description"),
-  status: ticketStatusEnum("status").default("open").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  deletedAt: timestamp("deleted_at"),
-});
+export const propertyManagers = pgTable(
+  "propertyManagers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    propertyId: uuid("propertyId")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    userId: uuid("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: userRoleEnum("role").notNull().default("manager"), // manager/caretaker/admin
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("propertyManagers_propertyId_userId_unique").on(
+      t.propertyId,
+      t.userId
+    ),
+  ]
+);
 
-// =============================
-// BILLING PLANS
-// =============================
-export const billingPlans = pgTable("billing_plans", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  interval: billingIntervalEnum("interval").notNull().default("monthly"),
-  maxProperties: integer("max_properties").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const units = pgTable(
+  "units",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    propertyId: uuid("propertyId")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    code: varchar("code", { length: 64 }).notNull(), // e.g., A-101
+    floor: integer("floor"),
+    bedrooms: integer("bedrooms").notNull().default(0),
+    bathrooms: integer("bathrooms").notNull().default(0),
+    sizeSqm: numeric("sizeSqm", { precision: 10, scale: 2 }),
+    baseRent: numeric("baseRent", { precision: 12, scale: 2 }).notNull().default("0"),
+    status: unitStatusEnum("status").notNull().default("vacant"),
+    isActive: boolean("isActive").notNull().default(true),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("units_propertyId_code_unique").on(
+      t.propertyId,
+      t.code
+    ),
+    index("units_propertyId_index").on(t.propertyId),
+    index("units_status_index").on(t.status),
+  ]
+);
 
-// Subscriptions
-export const subscriptions = pgTable("subscriptions", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  planId: uuid("plan_id").references(() => billingPlans.id).notNull(),
-  startDate: timestamp("start_date").notNull(),
-  endDate: timestamp("end_date"),
-  isActive: boolean("is_active").default(true),
-});
+export const amenities = pgTable(
+  "amenities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 128 }).notNull(),
+    description: text("description"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("amenities_organizationId_name_unique").on(
+      t.organizationId,
+      t.name
+    ),
+  ]
+);
 
-// =============================
-// ACTIVITY LOGS
-// =============================
-export const activityLogs = pgTable('activity_logs', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  timestamp: timestamp('timestamp').defaultNow(),
-  userId: uuid('user_id'),
-  entityType: varchar('entity_type', { length: 50 }),
-  entityId: varchar('entity_id', { length: 36 }),
-  action: varchar('action', { length: 50 }),
-  method: varchar('method', { length: 10 }),
-  endpoint: text('endpoint'),
-  statusCode: integer('status_code'),
-  description: text('description'),
-  metadata: jsonb('metadata'),
-  ipAddress: varchar('ip_address', { length: 45 }),
-  userAgent: text('user_agent'),
-  responseTime: integer('response_time'), // ms
-});
+export const unitAmenities = pgTable(
+  "unitAmenities",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    unitId: uuid("unitId")
+      .notNull()
+      .references(() => units.id, { onDelete: "cascade" }),
+    amenityId: uuid("amenityId")
+      .notNull()
+      .references(() => amenities.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("unitAmenities_unitId_amenityId_unique").on(
+      t.unitId,
+      t.amenityId
+    ),
+  ]
+);
 
-// =============================
-// RELATIONS
-// =============================
+// ---------- Leases ----------
+export const leases = pgTable(
+  "leases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    propertyId: uuid("propertyId")
+      .notNull()
+      .references(() => properties.id, { onDelete: "restrict" }),
+    unitId: uuid("unitId")
+      .notNull()
+      .references(() => units.id, { onDelete: "restrict" }),
+    tenantUserId: uuid("tenantUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    status: leaseStatusEnum("status").notNull().default("draft"),
+    startDate: timestamp("startDate", { withTimezone: true }).notNull(),
+    endDate: timestamp("endDate", { withTimezone: true }),
+    rentAmount: numeric("rentAmount", { precision: 12, scale: 2 }).notNull(),
+    depositAmount: numeric("depositAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    dueDayOfMonth: integer("dueDayOfMonth").notNull().default(1), // 1..28
+    billingCurrency: varchar("billingCurrency", { length: 3 }).notNull().default("KES"),
+    lateFeePercent: numeric("lateFeePercent", { precision: 5, scale: 2 }).default("0"),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("leases_unitId_active_index").on(t.unitId, t.status),
+    index("leases_organizationId_index").on(t.organizationId),
+    index("leases_tenantUserId_index").on(t.tenantUserId),
+  ]
+);
+
+// ---------- Invoicing & Payments ----------
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leaseId: uuid("leaseId")
+      .notNull()
+      .references(() => leases.id, { onDelete: "cascade" }),
+    invoiceNumber: varchar("invoiceNumber", { length: 64 }).notNull(),
+    status: invoiceStatusEnum("status").notNull().default("issued"),
+    issueDate: timestamp("issueDate", { withTimezone: true }).notNull().defaultNow(),
+    dueDate: timestamp("dueDate", { withTimezone: true }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("KES"),
+    subtotalAmount: numeric("subtotalAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    taxAmount: numeric("taxAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    totalAmount: numeric("totalAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    balanceAmount: numeric("balanceAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    notes: text("notes"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("invoices_organizationId_invoiceNumber_unique").on(
+      t.organizationId,
+      t.invoiceNumber
+    ),
+    index("invoices_leaseId_index").on(t.leaseId),
+    index("invoices_status_index").on(t.status),
+    index("invoices_dueDate_index").on(t.dueDate),
+  ]
+);
+
+export const invoiceItems = pgTable(
+  "invoiceItems",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    invoiceId: uuid("invoiceId")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    description: varchar("description", { length: 256 }).notNull(),
+    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull().default("1"),
+    unitPrice: numeric("unitPrice", { precision: 12, scale: 2 }).notNull().default("0"),
+    lineTotal: numeric("lineTotal", { precision: 12, scale: 2 }).notNull().default("0"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+  },
+  (t) => [
+    index("invoiceItems_invoiceId_index").on(t.invoiceId),
+  ]
+);
+
+export const payments = pgTable(
+  "payments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    leaseId: uuid("leaseId")
+      .references(() => leases.id, { onDelete: "set null" }),
+    receivedFromUserId: uuid("receivedFromUserId")
+      .references(() => users.id, { onDelete: "set null" }), // usually tenant
+    receivedByUserId: uuid("receivedByUserId")
+      .references(() => users.id, { onDelete: "set null" }), // staff
+    method: paymentMethodEnum("method").notNull().default("cash"),
+    status: paymentStatusEnum("status").notNull().default("completed"),
+    amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+    currency: varchar("currency", { length: 3 }).notNull().default("KES"),
+    referenceCode: varchar("referenceCode", { length: 128 }), // e.g., Mpesa code / cheque no.
+    narrative: varchar("narrative", { length: 512 }),
+    receivedAt: timestamp("receivedAt", { withTimezone: true }).notNull().defaultNow(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("payments_organizationId_index").on(t.organizationId),
+    index("payments_method_index").on(t.method),
+    index("payments_status_index").on(t.status),
+    index("payments_leaseId_index").on(t.leaseId),
+    index("payments_referenceCode_index").on(t.referenceCode),
+  ]
+);
+
+// Supports partial allocations across multiple invoices
+export const paymentAllocations = pgTable(
+  "paymentAllocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    paymentId: uuid("paymentId")
+      .notNull()
+      .references(() => payments.id, { onDelete: "cascade" }),
+    invoiceId: uuid("invoiceId")
+      .notNull()
+      .references(() => invoices.id, { onDelete: "cascade" }),
+    amountApplied: numeric("amountApplied", { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("paymentAllocations_paymentId_invoiceId_unique").on(
+      t.paymentId,
+      t.invoiceId
+    ),
+    index("paymentAllocations_invoiceId_index").on(t.invoiceId),
+  ]
+);
+
+// Optional: stable, human-facing receipt numbers
+export const receipts = pgTable(
+  "receipts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    paymentId: uuid("paymentId")
+      .notNull()
+      .references(() => payments.id, { onDelete: "cascade" }),
+    receiptNumber: varchar("receiptNumber", { length: 64 }).notNull(),
+    issuedAt: timestamp("issuedAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("receipts_organizationId_receiptNumber_unique").on(
+      t.organizationId,
+      t.receiptNumber
+    ),
+    uniqueIndex("receipts_paymentId_unique").on(t.paymentId),
+  ]
+);
+
+// ---------- Maintenance ----------
+export const maintenanceRequests = pgTable(
+  "maintenanceRequests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    propertyId: uuid("propertyId")
+      .notNull()
+      .references(() => properties.id, { onDelete: "cascade" }),
+    unitId: uuid("unitId")
+      .references(() => units.id, { onDelete: "set null" }),
+    createdByUserId: uuid("createdByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    assignedToUserId: uuid("assignedToUserId")
+      .references(() => users.id, { onDelete: "set null" }),
+    title: varchar("title", { length: 256 }).notNull(),
+    description: text("description"),
+    status: maintenanceStatusEnum("status").notNull().default("open"),
+    priority: priorityEnum("priority").notNull().default("medium"),
+    scheduledAt: timestamp("scheduledAt", { withTimezone: true }),
+    resolvedAt: timestamp("resolvedAt", { withTimezone: true }),
+    costAmount: numeric("costAmount", { precision: 12, scale: 2 }).default("0"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("maintenanceRequests_organizationId_index").on(t.organizationId),
+    index("maintenanceRequests_propertyId_index").on(t.propertyId),
+    index("maintenanceRequests_status_index").on(t.status),
+    index("maintenanceRequests_assignedToUserId_index").on(t.assignedToUserId),
+    index("maintenanceRequests_priority_index").on(t.priority),
+  ]
+);
+
+export const maintenanceComments = pgTable(
+  "maintenanceComments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    maintenanceRequestId: uuid("maintenanceRequestId")
+      .notNull()
+      .references(() => maintenanceRequests.id, { onDelete: "cascade" }),
+    authorUserId: uuid("authorUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("maintenanceComments_maintenanceRequestId_index").on(
+      t.maintenanceRequestId
+    ),
+  ]
+);
+
+export const maintenanceAttachments = pgTable(
+  "maintenanceAttachments",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    maintenanceRequestId: uuid("maintenanceRequestId")
+      .notNull()
+      .references(() => maintenanceRequests.id, { onDelete: "cascade" }),
+    fileUrl: varchar("fileUrl", { length: 1024 }).notNull(),
+    fileName: varchar("fileName", { length: 256 }),
+    contentType: varchar("contentType", { length: 128 }),
+    sizeBytes: integer("sizeBytes"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("maintenanceAttachments_maintenanceRequestId_index").on(
+      t.maintenanceRequestId
+    ),
+  ]
+);
+
+// ---------- Activity Log ----------
+export const activityLogs = pgTable(
+  "activityLogs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .references(() => organizations.id, { onDelete: "set null" }),
+    actorUserId: uuid("actorUserId")
+      .references(() => users.id, { onDelete: "set null" }),
+    action: activityActionEnum("action").notNull(),
+    targetTable: varchar("targetTable", { length: 128 }).notNull(),
+    targetId: varchar("targetId", { length: 64 }).notNull(), // store UUID string or composite identifier
+    description: varchar("description", { length: 512 }),
+    changes: jsonb("changes").$type<Record<string, unknown>>(), // before/after diff
+    ipAddress: varchar("ipAddress", { length: 64 }),
+    userAgent: varchar("userAgent", { length: 256 }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("activityLogs_organizationId_index").on(t.organizationId),
+    index("activityLogs_actorUserId_index").on(t.actorUserId),
+    index("activityLogs_target_index").on(t.targetTable, t.targetId),
+    index("activityLogs_action_index").on(t.action),
+    index("activityLogs_createdAt_index").on(t.createdAt),
+  ]
+);
+
+// ---------- Relations (Drizzle) ----------
 export const usersRelations = relations(users, ({ many }) => ({
+  userAuth: many(userAuth),
+  refreshTokens: many(refreshTokens),
+  userOrganizations: many(userOrganizations),
+  propertyManagers: many(propertyManagers),
+  maintenanceRequestsCreated: many(maintenanceRequests, { relationName: "createdBy" }),
+  maintenanceRequestsAssigned: many(maintenanceRequests, { relationName: "assignedTo" }),
+  maintenanceComments: many(maintenanceComments),
+  paymentsReceivedFrom: many(payments, { relationName: "receivedFrom" }),
+  paymentsReceivedBy: many(payments, { relationName: "receivedBy" }),
+}));
+
+export const userAuthRelations = relations(userAuth, ({ one }) => ({
+  user: one(users, { fields: [userAuth.userId], references: [users.id] }),
+}));
+
+export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
+  user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
+}));
+
+
+export const organizationsRelations = relations(organizations, ({ many }) => ({
+  userOrganizations: many(userOrganizations),
   properties: many(properties),
+  amenities: many(amenities),
   leases: many(leases),
+  invoices: many(invoices),
+  payments: many(payments),
+  receipts: many(receipts),
   activityLogs: many(activityLogs),
 }));
 
+export const userOrganizationsRelations = relations(userOrganizations, ({ one }) => ({
+  user: one(users, { fields: [userOrganizations.userId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [userOrganizations.organizationId],
+    references: [organizations.id],
+  }),
+}));
+
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
-  owner: one(users, { fields: [properties.ownerId], references: [users.id] }),
-  manager: one(users, { fields: [properties.managerId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [properties.organizationId],
+    references: [organizations.id],
+  }),
   units: many(units),
-  amenities: many(propertyAmenities),
+  propertyManagers: many(propertyManagers),
+  maintenanceRequests: many(maintenanceRequests),
+  leases: many(leases),
+}));
+
+export const propertyManagersRelations = relations(propertyManagers, ({ one }) => ({
+  property: one(properties, { fields: [propertyManagers.propertyId], references: [properties.id] }),
+  user: one(users, { fields: [propertyManagers.userId], references: [users.id] }),
 }));
 
 export const unitsRelations = relations(units, ({ one, many }) => ({
   property: one(properties, { fields: [units.propertyId], references: [properties.id] }),
+  unitAmenities: many(unitAmenities),
   leases: many(leases),
-  amenities: many(unitAmenities),
+  maintenanceRequests: many(maintenanceRequests),
 }));
 
-export const leasesRelations = relations(leases, ({ one, many }) => ({
-  tenant: one(users, { fields: [leases.tenantId], references: [users.id] }),
-  unit: one(units, { fields: [leases.unitId], references: [units.id] }),
-  payments: many(payments),
-}));
-
-export const amenitiesRelations = relations(amenities, ({ many }) => ({
-  properties: many(propertyAmenities),
-  units: many(unitAmenities),
-}));
-
-export const propertyAmenitiesRelations = relations(propertyAmenities, ({ one }) => ({
-  property: one(properties, { fields: [propertyAmenities.propertyId], references: [properties.id] }),
-  amenity: one(amenities, { fields: [propertyAmenities.amenityId], references: [amenities.id] }),
+export const amenitiesRelations = relations(amenities, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [amenities.organizationId],
+    references: [organizations.id],
+  }),
+  unitAmenities: many(unitAmenities),
 }));
 
 export const unitAmenitiesRelations = relations(unitAmenities, ({ one }) => ({
@@ -241,44 +703,143 @@ export const unitAmenitiesRelations = relations(unitAmenities, ({ one }) => ({
   amenity: one(amenities, { fields: [unitAmenities.amenityId], references: [amenities.id] }),
 }));
 
-// =============================
-// INFERRED TYPES
-// =============================
-export type User = InferModel<typeof users>;
-export type NewUser = InferModel<typeof users, "insert">;
+export const leasesRelations = relations(leases, ({ one, many }) => ({
+  organization: one(organizations, { fields: [leases.organizationId], references: [organizations.id] }),
+  property: one(properties, { fields: [leases.propertyId], references: [properties.id] }),
+  unit: one(units, { fields: [leases.unitId], references: [units.id] }),
+  tenant: one(users, { fields: [leases.tenantUserId], references: [users.id] }),
+  invoices: many(invoices),
+  payments: many(payments),
+}));
 
-export type Property = InferModel<typeof properties>;
-export type NewProperty = InferModel<typeof properties, "insert">;
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
+  organization: one(organizations, { fields: [invoices.organizationId], references: [organizations.id] }),
+  lease: one(leases, { fields: [invoices.leaseId], references: [leases.id] }),
+  items: many(invoiceItems),
+  allocations: many(paymentAllocations),
+}));
 
-export type Unit = InferModel<typeof units>;
-export type NewUnit = InferModel<typeof units, "insert">;
+export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
+  invoice: one(invoices, { fields: [invoiceItems.invoiceId], references: [invoices.id] }),
+}));
 
-export type Amenity = InferModel<typeof amenities>;
-export type NewAmenity = InferModel<typeof amenities, "insert">;
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
+  organization: one(organizations, { fields: [payments.organizationId], references: [organizations.id] }),
+  lease: one(leases, { fields: [payments.leaseId], references: [leases.id] }),
+  receivedFrom: one(users, { fields: [payments.receivedFromUserId], references: [users.id] }),
+  receivedBy: one(users, { fields: [payments.receivedByUserId], references: [users.id] }),
+  allocations: many(paymentAllocations),
+  receipt: many(receipts),
+}));
 
-export type Lease = InferModel<typeof leases>;
-export type NewLease = InferModel<typeof leases, "insert">;
+export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
+  payment: one(payments, { fields: [paymentAllocations.paymentId], references: [payments.id] }),
+  invoice: one(invoices, { fields: [paymentAllocations.invoiceId], references: [invoices.id] }),
+}));
 
-export type Payment = InferModel<typeof payments>;
-export type NewPayment = InferModel<typeof payments, "insert">;
+export const receiptsRelations = relations(receipts, ({ one }) => ({
+  organization: one(organizations, { fields: [receipts.organizationId], references: [organizations.id] }),
+  payment: one(payments, { fields: [receipts.paymentId], references: [payments.id] }),
+}));
 
-export type Ticket = InferModel<typeof tickets>;
-export type NewTicket = InferModel<typeof tickets, "insert">;
+export const maintenanceRequestsRelations = relations(maintenanceRequests, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [maintenanceRequests.organizationId],
+    references: [organizations.id],
+  }),
+  property: one(properties, { fields: [maintenanceRequests.propertyId], references: [properties.id] }),
+  unit: one(units, { fields: [maintenanceRequests.unitId], references: [units.id] }),
+  createdBy: one(users, {
+    fields: [maintenanceRequests.createdByUserId],
+    references: [users.id],
+    relationName: "createdBy",
+  }),
+  assignedTo: one(users, {
+    fields: [maintenanceRequests.assignedToUserId],
+    references: [users.id],
+    relationName: "assignedTo",
+  }),
+  comments: many(maintenanceComments),
+  attachments: many(maintenanceAttachments),
+}));
 
-export type BillingPlan = InferModel<typeof billingPlans>;
-export type NewBillingPlan = InferModel<typeof billingPlans, "insert">;
+export const maintenanceCommentsRelations = relations(maintenanceComments, ({ one }) => ({
+  maintenanceRequest: one(maintenanceRequests, {
+    fields: [maintenanceComments.maintenanceRequestId],
+    references: [maintenanceRequests.id],
+  }),
+  author: one(users, { fields: [maintenanceComments.authorUserId], references: [users.id] }),
+}));
 
-export type Subscription = InferModel<typeof subscriptions>;
-export type NewSubscription = InferModel<typeof subscriptions, "insert">;
+export const maintenanceAttachmentsRelations = relations(maintenanceAttachments, ({ one }) => ({
+  maintenanceRequest: one(maintenanceRequests, {
+    fields: [maintenanceAttachments.maintenanceRequestId],
+    references: [maintenanceRequests.id],
+  }),
+}));
 
-export type ActivityLog = InferModel<typeof activityLogs>;
-export type NewActivityLog = InferModel<typeof activityLogs, "insert">;
+export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
+  organization: one(organizations, { fields: [activityLogs.organizationId], references: [organizations.id] }),
+  actor: one(users, { fields: [activityLogs.actorUserId], references: [users.id] }),
+}));
 
-export type PropertyAmenity = InferModel<typeof propertyAmenities>;
-export type NewPropertyAmenity = InferModel<typeof propertyAmenities, "insert">;
+// ---------- Inferred Types ----------
+export type UserAuth = typeof userAuth.$inferSelect;
+export type NewUserAuth = typeof userAuth.$inferInsert;
 
-export type UnitAmenity = InferModel<typeof unitAmenities>;
-export type NewUnitAmenity = InferModel<typeof unitAmenities, "insert">;
+export type RefreshToken = typeof refreshTokens.$inferSelect;
+export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 
-export type TRefreshTokensInsert = InferModel<typeof refreshTokens, "insert">;
-export type TRefreshTokensSelect = InferModel<typeof refreshTokens>;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
+
+export type UserOrganization = typeof userOrganizations.$inferSelect;
+export type NewUserOrganization = typeof userOrganizations.$inferInsert;
+
+export type Property = typeof properties.$inferSelect;
+export type NewProperty = typeof properties.$inferInsert;
+
+export type PropertyManager = typeof propertyManagers.$inferSelect;
+export type NewPropertyManager = typeof propertyManagers.$inferInsert;
+
+export type Unit = typeof units.$inferSelect;
+export type NewUnit = typeof units.$inferInsert;
+
+export type Amenity = typeof amenities.$inferSelect;
+export type NewAmenity = typeof amenities.$inferInsert;
+
+export type UnitAmenity = typeof unitAmenities.$inferSelect;
+export type NewUnitAmenity = typeof unitAmenities.$inferInsert;
+
+export type Lease = typeof leases.$inferSelect;
+export type NewLease = typeof leases.$inferInsert;
+
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
+
+export type InvoiceItem = typeof invoiceItems.$inferSelect;
+export type NewInvoiceItem = typeof invoiceItems.$inferInsert;
+
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
+
+export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
+export type NewPaymentAllocation = typeof paymentAllocations.$inferInsert;
+
+export type Receipt = typeof receipts.$inferSelect;
+export type NewReceipt = typeof receipts.$inferInsert;
+
+export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
+export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
+
+export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
+export type NewMaintenanceComment = typeof maintenanceComments.$inferInsert;
+
+export type MaintenanceAttachment = typeof maintenanceAttachments.$inferSelect;
+export type NewMaintenanceAttachment = typeof maintenanceAttachments.$inferInsert;
+
+export type ActivityLog = typeof activityLogs.$inferSelect;
+export type NewActivityLog = typeof activityLogs.$inferInsert;
