@@ -1,6 +1,7 @@
 // types/api-response.ts
 
-import { Amenity, Invoice, InvoiceItem, Lease, MaintenanceAttachment, MaintenanceComment, MaintenanceRequest, Organization, Payment, PaymentAllocation, Property, PropertyManager, Receipt, Unit, User, UserOrganization } from "../drizzle/schema";
+import { ActivityLog } from "../../drizzle/schema";
+import { Amenity, Invoice, InvoiceItem, Lease, MaintenanceAttachment, MaintenanceComment, MaintenanceRequest, Organization, Payment, PaymentAllocation, Property, PropertyManager, Receipt, Unit, User, UserOrganization } from "../../drizzle/schema";
 
 /**
  * Standardized response format for all REST API endpoints.
@@ -138,6 +139,11 @@ export interface MaintenanceRequestResponse extends MaintenanceRequest {
   assignedTo?: User;
   comments?: MaintenanceComment[];
   attachments?: MaintenanceAttachment[];
+}
+
+export interface ActivityLogResponse extends ActivityLog {
+  organization?: Organization;
+  actor?: User;
 }
 
 // Paginated response types

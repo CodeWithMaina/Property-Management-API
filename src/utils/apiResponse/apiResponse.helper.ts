@@ -11,7 +11,8 @@ import {
   InvoiceResponse,
   PaymentResponse,
   MaintenanceRequestResponse,
-  PaginatedResponse
+  PaginatedResponse,
+  ActivityLogResponse
 } from './apiResponse.types';
 
 interface ResponseParams<T> {
@@ -217,3 +218,20 @@ export function createMaintenanceRequestsResponse(
   return createSuccessResponse(requests, message);
 }
 
+export function createActivityLogResponse(
+  log: ActivityLogResponse,
+  message: string = 'Activity log retrieved successfully.'
+): ApiResponse<ActivityLogResponse> {
+  return createSuccessResponse(log, message);
+}
+
+export function createActivityLogsResponse(
+  logs: ActivityLogResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'Activity logs retrieved successfully.'
+): ApiResponse<ActivityLogResponse[]> {
+  if (pagination) {
+    return createPaginatedResponse(logs, pagination, message);
+  }
+  return createSuccessResponse(logs, message);
+}

@@ -724,41 +724,57 @@ export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
 }));
 
 export const paymentsRelations = relations(payments, ({ one, many }) => ({
-  organization: one(organizations, { fields: [payments.organizationId], references: [organizations.id] }),
-  lease: one(leases, { fields: [payments.leaseId], references: [leases.id] }),
-  receivedFrom: one(users, { fields: [payments.receivedFromUserId], references: [users.id] }),
-  receivedBy: one(users, { fields: [payments.receivedByUserId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [payments.organizationId],
+    references: [organizations.id],
+  }),
+  lease: one(leases, {
+    fields: [payments.leaseId],
+    references: [leases.id],
+  }),
+  receivedFrom: one(users, {
+    fields: [payments.receivedFromUserId],
+    references: [users.id],
+    relationName: "receivedFrom",
+  }),
+  receivedBy: one(users, {
+    fields: [payments.receivedByUserId],
+    references: [users.id],
+    relationName: "receivedBy",
+  }),
   allocations: many(paymentAllocations),
   receipt: many(receipts),
 }));
 
+
 export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
-  payment: one(payments, { fields: [paymentAllocations.paymentId], references: [payments.id] }),
-  invoice: one(invoices, { fields: [paymentAllocations.invoiceId], references: [invoices.id] }),
+  payment: one(payments, {
+    fields: [paymentAllocations.paymentId],
+    references: [payments.id],
+  }),
+  invoice: one(invoices, {
+    fields: [paymentAllocations.invoiceId],
+    references: [invoices.id],
+  }),
 }));
 
 export const receiptsRelations = relations(receipts, ({ one }) => ({
-  organization: one(organizations, { fields: [receipts.organizationId], references: [organizations.id] }),
-  payment: one(payments, { fields: [receipts.paymentId], references: [payments.id] }),
+  organization: one(organizations, {
+    fields: [receipts.organizationId],
+    references: [organizations.id],
+  }),
+  payment: one(payments, {
+    fields: [receipts.paymentId],
+    references: [payments.id],
+  }),
 }));
 
 export const maintenanceRequestsRelations = relations(maintenanceRequests, ({ one, many }) => ({
-  organization: one(organizations, {
-    fields: [maintenanceRequests.organizationId],
-    references: [organizations.id],
-  }),
+  organization: one(organizations, { fields: [maintenanceRequests.organizationId], references: [organizations.id] }),
   property: one(properties, { fields: [maintenanceRequests.propertyId], references: [properties.id] }),
   unit: one(units, { fields: [maintenanceRequests.unitId], references: [units.id] }),
-  createdBy: one(users, {
-    fields: [maintenanceRequests.createdByUserId],
-    references: [users.id],
-    relationName: "createdBy",
-  }),
-  assignedTo: one(users, {
-    fields: [maintenanceRequests.assignedToUserId],
-    references: [users.id],
-    relationName: "assignedTo",
-  }),
+  createdBy: one(users, { fields: [maintenanceRequests.createdByUserId], references: [users.id], relationName: "createdBy" }),
+  assignedTo: one(users, { fields: [maintenanceRequests.assignedToUserId], references: [users.id], relationName: "assignedTo" }),
   comments: many(maintenanceComments),
   attachments: many(maintenanceAttachments),
 }));
@@ -768,7 +784,10 @@ export const maintenanceCommentsRelations = relations(maintenanceComments, ({ on
     fields: [maintenanceComments.maintenanceRequestId],
     references: [maintenanceRequests.id],
   }),
-  author: one(users, { fields: [maintenanceComments.authorUserId], references: [users.id] }),
+  author: one(users, {
+    fields: [maintenanceComments.authorUserId],
+    references: [users.id],
+  }),
 }));
 
 export const maintenanceAttachmentsRelations = relations(maintenanceAttachments, ({ one }) => ({
@@ -779,8 +798,14 @@ export const maintenanceAttachmentsRelations = relations(maintenanceAttachments,
 }));
 
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
-  organization: one(organizations, { fields: [activityLogs.organizationId], references: [organizations.id] }),
-  actor: one(users, { fields: [activityLogs.actorUserId], references: [users.id] }),
+  organization: one(organizations, {
+    fields: [activityLogs.organizationId],
+    references: [organizations.id],
+  }),
+  actor: one(users, {
+    fields: [activityLogs.actorUserId],
+    references: [users.id],
+  }),
 }));
 
 // ---------- Inferred Types ----------
@@ -843,3 +868,13 @@ export type NewMaintenanceAttachment = typeof maintenanceAttachments.$inferInser
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
+
+export type UserRoleEnum = (typeof userRoleEnum.enumValues)[number];
+export type ActivityActionEnum = (typeof activityActionEnum.enumValues)[number];
+export type UnitStatusEnum = (typeof unitStatusEnum.enumValues)[number];
+export type LeaseStatusEnum = (typeof leaseStatusEnum.enumValues)[number];
+export type InvoiceStatusEnum = (typeof invoiceStatusEnum.enumValues)[number];
+export type PaymentMethodEnum = (typeof paymentMethodEnum.enumValues)[number];
+export type PaymentStatusEnum = (typeof paymentStatusEnum.enumValues)[number];
+export type MaintenanceStatusEnum = (typeof maintenanceStatusEnum.enumValues)[number];
+export type PriorityEnum = (typeof priorityEnum.enumValues)[number];

@@ -5,132 +5,102 @@ import {
   createUserService,
   updateUserService,
   deleteUserService,
+  deactivateUserService,
+  activateUserService,
 } from "./user.service";
-import { type NewUser } from "../drizzle/schema";
-import { userUpdateSchema } from "./user.schema";
+import {
+  createSuccessResponse,
+  createErrorResponse,
+  createPaginatedResponse,
+  createUserResponse,
+  createUsersResponse,
+} from "../utils/apiResponse/apiResponse.helper";
+import { asyncHandler } from "../utils/errorHandler";
+import { UserFilters } from "./user.types";
 
-export const getUsersController = async (req: Request, res: Response) => {
-  try {
-    const users = await getUsersService();
-    if (users.length === 0) {
-      res.status(404).json({ message: "No users found" });
-      return;
-    }
-    res.status(200).json(users);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch users",
-      error: error.message,
-    });
+export const getUsers = asyncHandler(async (req: Request, res: Response) => {
+  const filters: UserFilters = {
+    isActive: req.query.isActive ? req.query.isActive === "true" : undefined,
+    search: req.query.search as string,
+    page: req.query.page ? parseInt(req.query.page as string) : 1,
+    limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+  };
+
+  const result = await getUsersService(filters);
+  
+  if (result.pagination) {
+    return res.status(200).json(
+      createPaginatedResponse(result.data, result.pagination, "Users retrieved successfully")
+    );
   }
-};
+  
+  return res.status(200).json(
+    createUsersResponse(result.data,result.pagination, "Users retrieved successfully")
+  );
+});
 
-export const getUserByIdController = async (req: Request, res: Response) => {
-  try {
-    const userId = req.params.id;
-    if (!userId) {
-      res.status(400).json({ message: "Invalid user ID" });
-      return;
-    }
+export const getUserById = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  
+  const user = await getUserByIdService(id);
+  
+  return res.status(200).json(
+    createUserResponse(user, "User retrieved successfully")
+  );
+});
 
-    const user = await getUserByIdService(userId);
-    if (!user) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-    res.status(200).json(user);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch user",
-      error: error.message,
-    });
-  }
-};
+export const createUser = asyncHandler(async (req: Request, res: Response) => {
+  const userData = req.body;
+  const actorUserId = (req as any).user?.id; // Assuming user is attached to request by auth middleware
+  
+  const newUser = await createUserService(userData, actorUserId);
+  
+  return res.status(201).json(
+    createUserResponse(newUser, "User created successfully")
+  );
+});
 
-export const createUserController = async (req: Request, res: Response) => {
-  try {
-    const userData: NewUser = req.body;
-    if (!userData.email || !userData.passwordHash || !userData.name) {
-      res.status(400).json({ message: "Missing required fields" });
-      return;
-    }
+export const updateUser = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const userData = req.body;
+  const actorUserId = (req as any).user?.id;
+  
+  const updatedUser = await updateUserService(id, userData, actorUserId);
+  
+  return res.status(200).json(
+    createUserResponse(updatedUser, "User updated successfully")
+  );
+});
 
-    const newUser = await createUserService(userData);
-    res.status(201).json(newUser);
-  } catch (error: any) {
-    if (error.code === '23505') {
-      res.status(409).json({
-        message: "Email already exists",
-        error: "email_taken",
-      });
-      return;
-    }
-    res.status(500).json({
-      message: "Failed to create user",
-      error: error.message,
-    });
-  }
-};
+export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const actorUserId = (req as any).user?.id;
+  
+  const deletedUser = await deleteUserService(id, actorUserId);
+  
+  return res.status(200).json(
+    createSuccessResponse(null, "User deleted successfully")
+  );
+});
 
-export const updateUserController = async (req: Request, res: Response) => {
-  try {
-    const userId = req.params.id;
-    if (!userId) {
-      res.status(400).json({ message: "Invalid user ID" });
-      return;
-    }
+export const deactivateUser = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const actorUserId = (req as any).user?.id;
+  
+  const updatedUser = await deactivateUserService(id, actorUserId);
+  
+  return res.status(200).json(
+    createUserResponse(updatedUser, "User deactivated successfully")
+  );
+});
 
-    const parsed = userUpdateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Validation failed",
-        errors: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
-
-    const filteredData = parsed.data;
-    const updatedUser = await updateUserService(userId, filteredData);
-    
-    if (!updatedUser) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-
-    res.status(200).json(updatedUser);
-  } catch (error: any) {
-    if (error.code === '23505') {
-      res.status(409).json({
-        message: "Email already exists",
-        error: "email_taken",
-      });
-      return;
-    }
-    res.status(500).json({
-      message: "Failed to update user",
-      error: error.message,
-    });
-  }
-};
-
-export const deleteUserController = async (req: Request, res: Response) => {
-  try {
-    const userId = req.params.id;
-    if (!userId) {
-      res.status(400).json({ message: "Invalid user ID" });
-      return;
-    }
-
-    const deletedUser = await deleteUserService(userId);
-    if (!deletedUser) {
-      res.status(404).json({ message: "User not found" });
-      return;
-    }
-    res.status(200).json({ message: "User deleted successfully" });
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to delete user",
-      error: error.message,
-    });
-  }
-};
+export const activateUser = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const actorUserId = (req as any).user?.id;
+  
+  const updatedUser = await activateUserService(id, actorUserId);
+  
+  return res.status(200).json(
+    createUserResponse(updatedUser, "User activated successfully")
+  );
+});
