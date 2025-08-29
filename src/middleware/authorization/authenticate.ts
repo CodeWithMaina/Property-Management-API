@@ -13,7 +13,7 @@ export const authenticate = async (
   req: AuthorizationRequest,
   res: Response,
   next: NextFunction
-) => {
+) => {69
   try {
     // In a real implementation, you would verify JWT token here
     // For this example, we'll assume user ID is available in req.userId

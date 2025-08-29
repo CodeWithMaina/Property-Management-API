@@ -1,4 +1,3 @@
-// seed.ts
 import db from "./db";
 import {
   users,
@@ -22,128 +21,165 @@ import {
   userAuth,
   refreshTokens,
 } from "./schema";
-import * as bcrypt from "bcrypt";
 
-// Helper function to generate random dates within a range
-const randomDate = (start: Date, end: Date): Date => {
-  return new Date(start.getTime() + Math.random() * (end.getTime() - start.getTime()));
-};
+async function seed() {
+  console.log("✅ Seeding started...");
 
-export async function seed() {
-  console.log("Seeding database...");
+  // Clear all tables in reverse order of dependencies
+  console.log("🧹 Clearing tables...");
+  await db.delete(maintenanceAttachments).execute();
+  await db.delete(maintenanceComments).execute();
+  await db.delete(maintenanceRequests).execute();
+  await db.delete(receipts).execute();
+  await db.delete(paymentAllocations).execute();
+  await db.delete(payments).execute();
+  await db.delete(invoiceItems).execute();
+  await db.delete(invoices).execute();
+  await db.delete(leases).execute();
+  await db.delete(unitAmenities).execute();
+  await db.delete(amenities).execute();
+  await db.delete(units).execute();
+  await db.delete(propertyManagers).execute();
+  await db.delete(properties).execute();
+  await db.delete(userOrganizations).execute();
+  await db.delete(organizations).execute();
+  await db.delete(refreshTokens).execute();
+  await db.delete(userAuth).execute();
+  await db.delete(users).execute();
+  await db.delete(activityLogs).execute();
 
-  // Clear existing data (be careful in production!)
-  // You might want to disable this in production environments
-  console.log("Clearing existing data...");
-  const tables = [
-    maintenanceAttachments,
-    maintenanceComments,
-    maintenanceRequests,
-    receipts,
-    paymentAllocations,
-    payments,
-    invoiceItems,
-    invoices,
-    leases,
-    unitAmenities,
-    amenities,
-    units,
-    propertyManagers,
-    properties,
-    userOrganizations,
-    organizations,
-    refreshTokens,
-    userAuth,
-    users,
-    activityLogs,
-  ];
+  console.log("🌱 Seeding data...");
 
-  for (const table of tables) {
-    await db.delete(table);
-  }
-
-  // Create users
-  console.log("Creating users...");
-  const [adminUser, managerUser, tenantUser1, tenantUser2, caretakerUser] = await db
+  // 1. Users - 10 entries (various roles)
+  const userIds = await db
     .insert(users)
     .values([
       {
-        fullName: "Admin User",
-        email: "admin@example.com",
-        phone: "+254700000001",
+        fullName: "Super Admin",
+        email: "superadmin@example.com",
+        phone: "+254700000000",
         isActive: true,
         avatarUrl: "https://example.com/avatars/admin.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Property Owner",
+        email: "owner@example.com",
+        phone: "+254711111111",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/owner.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
         fullName: "Property Manager",
         email: "manager@example.com",
-        phone: "+254700000002",
+        phone: "+254722222222",
         isActive: true,
         avatarUrl: "https://example.com/avatars/manager.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        fullName: "John Tenant",
-        email: "tenant1@example.com",
-        phone: "+254700000003",
-        isActive: true,
-        avatarUrl: "https://example.com/avatars/tenant1.jpg",
-      },
-      {
-        fullName: "Jane Tenant",
-        email: "tenant2@example.com",
-        phone: "+254700000004",
-        isActive: true,
-        avatarUrl: "https://example.com/avatars/tenant2.jpg",
-      },
-      {
-        fullName: "Mike Caretaker",
+        fullName: "Caretaker",
         email: "caretaker@example.com",
-        phone: "+254700000005",
+        phone: "+254733333333",
         isActive: true,
         avatarUrl: "https://example.com/avatars/caretaker.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Tenant 1",
+        email: "tenant1@example.com",
+        phone: "+254744444444",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/tenant1.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Tenant 2",
+        email: "tenant2@example.com",
+        phone: "+254755555555",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/tenant2.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Tenant 3",
+        email: "tenant3@example.com",
+        phone: "+254766666666",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/tenant3.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Tenant 4",
+        email: "tenant4@example.com",
+        phone: "+254777777777",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/tenant4.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Maintenance Staff 1",
+        email: "maintenance1@example.com",
+        phone: "+254788888888",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/maintenance1.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        fullName: "Maintenance Staff 2",
+        email: "maintenance2@example.com",
+        phone: "+254799999999",
+        isActive: true,
+        avatarUrl: "https://example.com/avatars/maintenance2.jpg",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: users.id });
 
-  // Create user auth records
-  console.log("Creating user auth records...");
-  const passwordHash = await bcrypt.hash("password123", 10);
+  // 2. User Auth - for some users
   await db.insert(userAuth).values([
     {
-      userId: adminUser.id,
-      email: adminUser.email,
-      passwordHash,
+      userId: userIds[0].id,
+      email: "superadmin@example.com",
+      passwordHash: "$2b$10$examplehashedpassword1",
       isEmailVerified: true,
+      lastLoginAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
-      userId: managerUser.id,
-      email: managerUser.email,
-      passwordHash,
+      userId: userIds[1].id,
+      email: "owner@example.com",
+      passwordHash: "$2b$10$examplehashedpassword2",
       isEmailVerified: true,
+      lastLoginAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
-      userId: tenantUser1.id,
-      email: tenantUser1.email,
-      passwordHash,
+      userId: userIds[2].id,
+      email: "manager@example.com",
+      passwordHash: "$2b$10$examplehashedpassword3",
       isEmailVerified: true,
-    },
-    {
-      userId: tenantUser2.id,
-      email: tenantUser2.email,
-      passwordHash,
-      isEmailVerified: true,
-    },
-    {
-      userId: caretakerUser.id,
-      email: caretakerUser.email,
-      passwordHash,
-      isEmailVerified: true,
+      lastLoginAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ]);
 
-  // Create organizations
-  console.log("Creating organizations...");
-  const [organization] = await db
+  // 3. Organizations - 2 entries
+  const organizationIds = await db
     .insert(organizations)
     .values([
       {
@@ -151,52 +187,93 @@ export async function seed() {
         legalName: "Nairobi Properties Limited",
         taxId: "P051234567K",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        name: "Mombasa Real Estate",
+        legalName: "Mombasa Real Estate Holdings",
+        taxId: "M098765432K",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: organizations.id });
 
-  // Create user organizations (assign users to organization with roles)
-  console.log("Creating user organizations...");
+  // 4. User Organizations - assign users to organizations
   await db.insert(userOrganizations).values([
     {
-      userId: adminUser.id,
-      organizationId: organization.id,
+      userId: userIds[0].id,
+      organizationId: organizationIds[0].id,
       role: "superAdmin",
       isPrimary: true,
+      createdAt: new Date(),
     },
     {
-      userId: managerUser.id,
-      organizationId: organization.id,
+      userId: userIds[1].id,
+      organizationId: organizationIds[0].id,
+      role: "propertyOwner",
+      isPrimary: true,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[2].id,
+      organizationId: organizationIds[0].id,
       role: "manager",
       isPrimary: true,
+      createdAt: new Date(),
     },
     {
-      userId: tenantUser1.id,
-      organizationId: organization.id,
-      role: "tenant",
-      isPrimary: true,
-    },
-    {
-      userId: tenantUser2.id,
-      organizationId: organization.id,
-      role: "tenant",
-      isPrimary: true,
-    },
-    {
-      userId: caretakerUser.id,
-      organizationId: organization.id,
+      userId: userIds[3].id,
+      organizationId: organizationIds[0].id,
       role: "caretaker",
+      isPrimary: false,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[4].id,
+      organizationId: organizationIds[0].id,
+      role: "tenant",
+      isPrimary: false,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[5].id,
+      organizationId: organizationIds[0].id,
+      role: "tenant",
+      isPrimary: false,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[0].id,
+      organizationId: organizationIds[1].id,
+      role: "superAdmin",
       isPrimary: true,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[6].id,
+      organizationId: organizationIds[1].id,
+      role: "tenant",
+      isPrimary: false,
+      createdAt: new Date(),
+    },
+    {
+      userId: userIds[7].id,
+      organizationId: organizationIds[1].id,
+      role: "tenant",
+      isPrimary: false,
+      createdAt: new Date(),
     },
   ]);
 
-  // Create properties
-  console.log("Creating properties...");
-  const [property1, property2] = await db
+  // 5. Properties - 3 entries
+  const propertyIds = await db
     .insert(properties)
     .values([
       {
-        organizationId: organization.id,
+        organizationId: organizationIds[0].id,
         name: "Westlands Apartments",
         description: "Luxury apartments in Westlands, Nairobi",
         addressLine1: "123 Westlands Road",
@@ -206,10 +283,12 @@ export async function seed() {
         country: "Kenya",
         timezone: "Africa/Nairobi",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        organizationId: organization.id,
-        name: "Kilimani Heights",
+        organizationId: organizationIds[0].id,
+        name: "Kilimani Towers",
         description: "Modern apartments in Kilimani",
         addressLine1: "456 Kilimani Drive",
         city: "Nairobi",
@@ -218,428 +297,1097 @@ export async function seed() {
         country: "Kenya",
         timezone: "Africa/Nairobi",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        name: "Nyali Beach Residences",
+        description: "Beachfront apartments in Mombasa",
+        addressLine1: "789 Beach Road",
+        city: "Mombasa",
+        state: "Mombasa County",
+        postalCode: "80100",
+        country: "Kenya",
+        timezone: "Africa/Nairobi",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: properties.id });
 
-  // Assign property managers
-  console.log("Assigning property managers...");
+  // 6. Property Managers - assign managers to properties
   await db.insert(propertyManagers).values([
     {
-      propertyId: property1.id,
-      userId: managerUser.id,
+      propertyId: propertyIds[0].id,
+      userId: userIds[2].id,
       role: "manager",
+      createdAt: new Date(),
     },
     {
-      propertyId: property2.id,
-      userId: managerUser.id,
+      propertyId: propertyIds[1].id,
+      userId: userIds[2].id,
       role: "manager",
+      createdAt: new Date(),
     },
     {
-      propertyId: property1.id,
-      userId: caretakerUser.id,
+      propertyId: propertyIds[2].id,
+      userId: userIds[2].id,
+      role: "manager",
+      createdAt: new Date(),
+    },
+    {
+      propertyId: propertyIds[0].id,
+      userId: userIds[3].id,
       role: "caretaker",
+      createdAt: new Date(),
     },
   ]);
 
-  // Create amenities
-  console.log("Creating amenities...");
-  const [wifi, parking, gym, pool, security] = await db
-    .insert(amenities)
-    .values([
-      {
-        organizationId: organization.id,
-        name: "Wi-Fi",
-        description: "High-speed internet access",
-      },
-      {
-        organizationId: organization.id,
-        name: "Parking",
-        description: "Dedicated parking space",
-      },
-      {
-        organizationId: organization.id,
-        name: "Gym",
-        description: "Fitness center",
-      },
-      {
-        organizationId: organization.id,
-        name: "Swimming Pool",
-        description: "Outdoor swimming pool",
-      },
-      {
-        organizationId: organization.id,
-        name: "24/7 Security",
-        description: "Round-the-clock security services",
-      },
-    ])
-    .returning();
-
-  // Create units
-  console.log("Creating units...");
-  const [unit1, unit2, unit3, unit4] = await db
+  // 7. Units - 8 entries across properties
+  const unitIds = await db
     .insert(units)
     .values([
+      // Westlands Apartments
       {
-        propertyId: property1.id,
+        propertyId: propertyIds[0].id,
         code: "A-101",
         floor: 1,
         bedrooms: 2,
         bathrooms: 2,
         sizeSqm: "85.50",
-        baseRent: "35000.00",
+        baseRent: "45000.00",
         status: "occupied",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        propertyId: property1.id,
+        propertyId: propertyIds[0].id,
         code: "A-102",
         floor: 1,
         bedrooms: 1,
         bathrooms: 1,
-        sizeSqm: "55.75",
-        baseRent: "25000.00",
-        status: "vacant",
+        sizeSqm: "55.00",
+        baseRent: "32000.00",
+        status: "occupied",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        propertyId: property2.id,
+        propertyId: propertyIds[0].id,
         code: "B-201",
         floor: 2,
         bedrooms: 3,
         bathrooms: 2,
-        sizeSqm: "110.25",
-        baseRent: "55000.00",
-        status: "occupied",
+        sizeSqm: "110.00",
+        baseRent: "65000.00",
+        status: "vacant",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
+      // Kilimani Towers
       {
-        propertyId: property2.id,
-        code: "B-202",
-        floor: 2,
+        propertyId: propertyIds[1].id,
+        code: "KT-101",
+        floor: 1,
         bedrooms: 2,
         bathrooms: 2,
         sizeSqm: "90.00",
-        baseRent: "40000.00",
+        baseRent: "48000.00",
+        status: "occupied",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        propertyId: propertyIds[1].id,
+        code: "KT-102",
+        floor: 1,
+        bedrooms: 1,
+        bathrooms: 1,
+        sizeSqm: "60.00",
+        baseRent: "35000.00",
         status: "reserved",
         isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Nyali Beach Residences
+      {
+        propertyId: propertyIds[2].id,
+        code: "NB-101",
+        floor: 1,
+        bedrooms: 2,
+        bathrooms: 2,
+        sizeSqm: "95.00",
+        baseRent: "55000.00",
+        status: "occupied",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        propertyId: propertyIds[2].id,
+        code: "NB-201",
+        floor: 2,
+        bedrooms: 3,
+        bathrooms: 2,
+        sizeSqm: "120.00",
+        baseRent: "75000.00",
+        status: "occupied",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        propertyId: propertyIds[2].id,
+        code: "NB-202",
+        floor: 2,
+        bedrooms: 1,
+        bathrooms: 1,
+        sizeSqm: "65.00",
+        baseRent: "40000.00",
+        status: "vacant",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: units.id });
 
-  // Assign amenities to units
-  console.log("Assigning amenities to units...");
+  // 8. Amenities - 5 entries
+  const amenityIds = await db
+    .insert(amenities)
+    .values([
+      {
+        organizationId: organizationIds[0].id,
+        name: "Swimming Pool",
+        description: "Outdoor swimming pool",
+        createdAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        name: "Gym",
+        description: "Fully equipped gym",
+        createdAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        name: "Parking",
+        description: "Secure parking space",
+        createdAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        name: "Security",
+        description: "24/7 security personnel",
+        createdAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        name: "Beach Access",
+        description: "Private beach access",
+        createdAt: new Date(),
+      },
+    ])
+    .returning({ id: amenities.id });
+
+  // 9. Unit Amenities - assign amenities to units
   await db.insert(unitAmenities).values([
-    { unitId: unit1.id, amenityId: wifi.id },
-    { unitId: unit1.id, amenityId: parking.id },
-    { unitId: unit1.id, amenityId: security.id },
-    { unitId: unit2.id, amenityId: wifi.id },
-    { unitId: unit2.id, amenityId: security.id },
-    { unitId: unit3.id, amenityId: wifi.id },
-    { unitId: unit3.id, amenityId: parking.id },
-    { unitId: unit3.id, amenityId: gym.id },
-    { unitId: unit3.id, amenityId: pool.id },
-    { unitId: unit3.id, amenityId: security.id },
-    { unitId: unit4.id, amenityId: wifi.id },
-    { unitId: unit4.id, amenityId: parking.id },
-    { unitId: unit4.id, amenityId: security.id },
+    {
+      unitId: unitIds[0].id,
+      amenityId: amenityIds[0].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[0].id,
+      amenityId: amenityIds[1].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[0].id,
+      amenityId: amenityIds[2].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[0].id,
+      amenityId: amenityIds[3].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[3].id,
+      amenityId: amenityIds[1].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[3].id,
+      amenityId: amenityIds[2].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[5].id,
+      amenityId: amenityIds[4].id,
+      createdAt: new Date(),
+    },
+    {
+      unitId: unitIds[6].id,
+      amenityId: amenityIds[4].id,
+      createdAt: new Date(),
+    },
   ]);
 
-  // Create leases
-  console.log("Creating leases...");
-  const leaseStartDate = new Date();
-  leaseStartDate.setMonth(leaseStartDate.getMonth() - 3); // 3 months ago
-  const leaseEndDate = new Date();
-  leaseEndDate.setFullYear(leaseEndDate.getFullYear() + 1); // 1 year from now
-
-  const [lease1, lease2] = await db
+  // 10. Leases - 5 entries
+  const now = new Date();
+  const leaseIds = await db
     .insert(leases)
     .values([
       {
-        organizationId: organization.id,
-        propertyId: property1.id,
-        unitId: unit1.id,
-        tenantUserId: tenantUser1.id,
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[0].id,
+        unitId: unitIds[0].id,
+        tenantUserId: userIds[4].id,
         status: "active",
-        startDate: leaseStartDate,
-        endDate: leaseEndDate,
-        rentAmount: "35000.00",
-        depositAmount: "70000.00",
+        startDate: new Date(now.getFullYear(), now.getMonth() - 3, 1),
+        endDate: new Date(now.getFullYear() + 1, now.getMonth() - 3, 1),
+        rentAmount: "45000.00",
+        depositAmount: "90000.00",
         dueDayOfMonth: 5,
         billingCurrency: "KES",
         lateFeePercent: "5.00",
-        notes: "First floor unit with parking",
+        notes: "Long-term lease agreement",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        organizationId: organization.id,
-        propertyId: property2.id,
-        unitId: unit3.id,
-        tenantUserId: tenantUser2.id,
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[0].id,
+        unitId: unitIds[1].id,
+        tenantUserId: userIds[5].id,
         status: "active",
-        startDate: leaseStartDate,
-        endDate: leaseEndDate,
+        startDate: new Date(now.getFullYear(), now.getMonth() - 1, 15),
+        endDate: new Date(now.getFullYear() + 1, now.getMonth() - 1, 15),
+        rentAmount: "32000.00",
+        depositAmount: "64000.00",
+        dueDayOfMonth: 15,
+        billingCurrency: "KES",
+        lateFeePercent: "5.00",
+        notes: "First-floor unit",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[1].id,
+        unitId: unitIds[3].id,
+        tenantUserId: userIds[6].id,
+        status: "active",
+        startDate: new Date(now.getFullYear(), now.getMonth() - 2, 1),
+        endDate: new Date(now.getFullYear() + 1, now.getMonth() - 2, 1),
+        rentAmount: "48000.00",
+        depositAmount: "96000.00",
+        dueDayOfMonth: 1,
+        billingCurrency: "KES",
+        lateFeePercent: "5.00",
+        notes: "Kilimani location",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        propertyId: propertyIds[2].id,
+        unitId: unitIds[5].id,
+        tenantUserId: userIds[7].id,
+        status: "active",
+        startDate: new Date(now.getFullYear(), now.getMonth() - 4, 10),
+        endDate: new Date(now.getFullYear() + 1, now.getMonth() - 4, 10),
         rentAmount: "55000.00",
         depositAmount: "110000.00",
-        dueDayOfMonth: 5,
+        dueDayOfMonth: 10,
         billingCurrency: "KES",
         lateFeePercent: "5.00",
-        notes: "Premium unit with all amenities",
+        notes: "Beachfront property",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        propertyId: propertyIds[2].id,
+        unitId: unitIds[6].id,
+        tenantUserId: userIds[8].id,
+        status: "active",
+        startDate: new Date(now.getFullYear(), now.getMonth() - 6, 20),
+        endDate: new Date(now.getFullYear() + 1, now.getMonth() - 6, 20),
+        rentAmount: "75000.00",
+        depositAmount: "150000.00",
+        dueDayOfMonth: 20,
+        billingCurrency: "KES",
+        lateFeePercent: "5.00",
+        notes: "Premium ocean view",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: leases.id });
 
-  // Create invoices
-  console.log("Creating invoices...");
-  const invoiceDueDate = new Date();
-  invoiceDueDate.setDate(5); // Due on 5th of current month
-  if (invoiceDueDate < new Date()) {
-    invoiceDueDate.setMonth(invoiceDueDate.getMonth() + 1);
-  }
-
-  const [invoice1, invoice2, invoice3] = await db
+  // 11. Invoices - 10 entries (2 per lease for current and previous month)
+  const invoiceIds = await db
     .insert(invoices)
     .values([
+      // Lease 1 - Current month
       {
-        organizationId: organization.id,
-        leaseId: lease1.id,
-        invoiceNumber: `INV-${new Date().getFullYear()}-0001`,
-        status: "paid",
-        issueDate: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth(), 1),
-        dueDate: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth(), 5),
-        currency: "KES",
-        subtotalAmount: "35000.00",
-        taxAmount: "0.00",
-        totalAmount: "35000.00",
-        balanceAmount: "0.00",
-      },
-      {
-        organizationId: organization.id,
-        leaseId: lease1.id,
-        invoiceNumber: `INV-${new Date().getFullYear()}-0002`,
-        status: "paid",
-        issueDate: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 1),
-        dueDate: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 5),
-        currency: "KES",
-        subtotalAmount: "35000.00",
-        taxAmount: "0.00",
-        totalAmount: "35000.00",
-        balanceAmount: "0.00",
-      },
-      {
-        organizationId: organization.id,
-        leaseId: lease1.id,
-        invoiceNumber: `INV-${new Date().getFullYear()}-0003`,
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[0].id,
+        invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-001`,
         status: "issued",
-        issueDate: new Date(),
-        dueDate: invoiceDueDate,
+        issueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 5),
         currency: "KES",
-        subtotalAmount: "35000.00",
+        subtotalAmount: "45000.00",
         taxAmount: "0.00",
-        totalAmount: "35000.00",
-        balanceAmount: "35000.00",
+        totalAmount: "45000.00",
+        balanceAmount: "45000.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 1 - Previous month
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[0].id,
+        invoiceNumber: `INV-${now.getFullYear()}${now
+          .getMonth()
+          .toString()
+          .padStart(2, "0")}-001`,
+        status: "paid",
+        issueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth() - 1, 5),
+        currency: "KES",
+        subtotalAmount: "45000.00",
+        taxAmount: "0.00",
+        totalAmount: "45000.00",
+        balanceAmount: "0.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 2 - Current month
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[1].id,
+        invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-002`,
+        status: "issued",
+        issueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 15),
+        currency: "KES",
+        subtotalAmount: "32000.00",
+        taxAmount: "0.00",
+        totalAmount: "32000.00",
+        balanceAmount: "32000.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 2 - Previous month
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[1].id,
+        invoiceNumber: `INV-${now.getFullYear()}${now
+          .getMonth()
+          .toString()
+          .padStart(2, "0")}-002`,
+        status: "paid",
+        issueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth() - 1, 15),
+        currency: "KES",
+        subtotalAmount: "32000.00",
+        taxAmount: "0.00",
+        totalAmount: "32000.00",
+        balanceAmount: "0.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 3 - Current month
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[2].id,
+        invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-003`,
+        status: "issued",
+        issueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        currency: "KES",
+        subtotalAmount: "48000.00",
+        taxAmount: "0.00",
+        totalAmount: "48000.00",
+        balanceAmount: "48000.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 3 - Previous month
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[2].id,
+        invoiceNumber: `INV-${now.getFullYear()}${now
+          .getMonth()
+          .toString()
+          .padStart(2, "0")}-003`,
+        status: "paid",
+        issueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        currency: "KES",
+        subtotalAmount: "48000.00",
+        taxAmount: "0.00",
+        totalAmount: "48000.00",
+        balanceAmount: "0.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 4 - Current month
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[3].id,
+        invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-004`,
+        status: "issued",
+        issueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 10),
+        currency: "KES",
+        subtotalAmount: "55000.00",
+        taxAmount: "0.00",
+        totalAmount: "55000.00",
+        balanceAmount: "55000.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 4 - Previous month
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[3].id,
+        invoiceNumber: `INV-${now.getFullYear()}${now
+          .getMonth()
+          .toString()
+          .padStart(2, "0")}-004`,
+        status: "paid",
+        issueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth() - 1, 10),
+        currency: "KES",
+        subtotalAmount: "55000.00",
+        taxAmount: "0.00",
+        totalAmount: "55000.00",
+        balanceAmount: "0.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 5 - Current month
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[4].id,
+        invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1)
+          .toString()
+          .padStart(2, "0")}-005`,
+        status: "issued",
+        issueDate: new Date(now.getFullYear(), now.getMonth(), 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth(), 20),
+        currency: "KES",
+        subtotalAmount: "75000.00",
+        taxAmount: "0.00",
+        totalAmount: "75000.00",
+        balanceAmount: "75000.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      // Lease 5 - Previous month
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[4].id,
+        invoiceNumber: `INV-${now.getFullYear()}${now
+          .getMonth()
+          .toString()
+          .padStart(2, "0")}-005`,
+        status: "paid",
+        issueDate: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        dueDate: new Date(now.getFullYear(), now.getMonth() - 1, 20),
+        currency: "KES",
+        subtotalAmount: "75000.00",
+        taxAmount: "0.00",
+        totalAmount: "75000.00",
+        balanceAmount: "0.00",
+        notes: "Monthly rent",
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: invoices.id });
 
-  // Create invoice items
-  console.log("Creating invoice items...");
+  // 12. Invoice Items - 1-2 items per invoice
   await db.insert(invoiceItems).values([
+    // Rent items
     {
-      invoiceId: invoice1.id,
+      invoiceId: invoiceIds[0].id,
       description: "Monthly Rent",
       quantity: "1",
-      unitPrice: "35000.00",
-      lineTotal: "35000.00",
+      unitPrice: "45000.00",
+      lineTotal: "45000.00",
     },
     {
-      invoiceId: invoice2.id,
+      invoiceId: invoiceIds[1].id,
       description: "Monthly Rent",
       quantity: "1",
-      unitPrice: "35000.00",
-      lineTotal: "35000.00",
+      unitPrice: "45000.00",
+      lineTotal: "45000.00",
     },
     {
-      invoiceId: invoice3.id,
+      invoiceId: invoiceIds[2].id,
       description: "Monthly Rent",
       quantity: "1",
-      unitPrice: "35000.00",
-      lineTotal: "35000.00",
+      unitPrice: "32000.00",
+      lineTotal: "32000.00",
+    },
+    {
+      invoiceId: invoiceIds[3].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "32000.00",
+      lineTotal: "32000.00",
+    },
+    {
+      invoiceId: invoiceIds[4].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "48000.00",
+      lineTotal: "48000.00",
+    },
+    {
+      invoiceId: invoiceIds[5].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "48000.00",
+      lineTotal: "48000.00",
+    },
+    {
+      invoiceId: invoiceIds[6].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "55000.00",
+      lineTotal: "55000.00",
+    },
+    {
+      invoiceId: invoiceIds[7].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "55000.00",
+      lineTotal: "55000.00",
+    },
+    {
+      invoiceId: invoiceIds[8].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "75000.00",
+      lineTotal: "75000.00",
+    },
+    {
+      invoiceId: invoiceIds[9].id,
+      description: "Monthly Rent",
+      quantity: "1",
+      unitPrice: "75000.00",
+      lineTotal: "75000.00",
+    },
+
+    // Additional charges for some invoices
+    {
+      invoiceId: invoiceIds[0].id,
+      description: "Water Bill",
+      quantity: "1",
+      unitPrice: "1200.00",
+      lineTotal: "1200.00",
+    },
+    {
+      invoiceId: invoiceIds[2].id,
+      description: "Maintenance Fee",
+      quantity: "1",
+      unitPrice: "1000.00",
+      lineTotal: "1000.00",
+    },
+    {
+      invoiceId: invoiceIds[6].id,
+      description: "Internet Service",
+      quantity: "1",
+      unitPrice: "2500.00",
+      lineTotal: "2500.00",
+    },
+    {
+      invoiceId: invoiceIds[8].id,
+      description: "Parking Fee",
+      quantity: "1",
+      unitPrice: "3000.00",
+      lineTotal: "3000.00",
     },
   ]);
 
-  // Create payments
-  console.log("Creating payments...");
-  const [payment1, payment2] = await db
+  // 13. Payments - 5 entries (for previous month invoices)
+  const paymentIds = await db
     .insert(payments)
     .values([
       {
-        organizationId: organization.id,
-        leaseId: lease1.id,
-        receivedFromUserId: tenantUser1.id,
-        receivedByUserId: managerUser.id,
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[0].id,
+        receivedFromUserId: userIds[4].id,
+        receivedByUserId: userIds[2].id,
         method: "mpesa",
         status: "completed",
-        amount: "35000.00",
+        amount: "45000.00",
         currency: "KES",
         referenceCode: "MPE123456789",
-        narrative: "Rent payment for March",
-        receivedAt: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth(), 3),
+        narrative: "Rent payment for previous month",
+        receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 3),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
       {
-        organizationId: organization.id,
-        leaseId: lease1.id,
-        receivedFromUserId: tenantUser1.id,
-        receivedByUserId: managerUser.id,
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[1].id,
+        receivedFromUserId: userIds[5].id,
+        receivedByUserId: userIds[2].id,
         method: "mpesa",
         status: "completed",
-        amount: "35000.00",
+        amount: "32000.00",
         currency: "KES",
         referenceCode: "MPE987654321",
-        narrative: "Rent payment for April",
-        receivedAt: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 2),
+        narrative: "Rent payment for previous month",
+        receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 10),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        leaseId: leaseIds[2].id,
+        receivedFromUserId: userIds[6].id,
+        receivedByUserId: userIds[2].id,
+        method: "bankTransfer",
+        status: "completed",
+        amount: "48000.00",
+        currency: "KES",
+        referenceCode: "BT2023001",
+        narrative: "Rent payment for previous month",
+        receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[3].id,
+        receivedFromUserId: userIds[7].id,
+        receivedByUserId: userIds[2].id,
+        method: "mpesa",
+        status: "completed",
+        amount: "55000.00",
+        currency: "KES",
+        referenceCode: "MPE555555555",
+        narrative: "Rent payment for previous month",
+        receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 5),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        leaseId: leaseIds[4].id,
+        receivedFromUserId: userIds[8].id,
+        receivedByUserId: userIds[2].id,
+        method: "cash",
+        status: "completed",
+        amount: "75000.00",
+        currency: "KES",
+        narrative: "Rent payment for previous month",
+        receivedAt: new Date(now.getFullYear(), now.getMonth() - 1, 15),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       },
     ])
-    .returning();
+    .returning({ id: payments.id });
 
-  // Create payment allocations
-  console.log("Creating payment allocations...");
+  // 14. Payment Allocations - link payments to invoices
   await db.insert(paymentAllocations).values([
     {
-      paymentId: payment1.id,
-      invoiceId: invoice1.id,
-      amountApplied: "35000.00",
+      paymentId: paymentIds[0].id,
+      invoiceId: invoiceIds[1].id,
+      amountApplied: "45000.00",
+      createdAt: new Date(),
     },
     {
-      paymentId: payment2.id,
-      invoiceId: invoice2.id,
-      amountApplied: "35000.00",
+      paymentId: paymentIds[1].id,
+      invoiceId: invoiceIds[3].id,
+      amountApplied: "32000.00",
+      createdAt: new Date(),
+    },
+    {
+      paymentId: paymentIds[2].id,
+      invoiceId: invoiceIds[5].id,
+      amountApplied: "48000.00",
+      createdAt: new Date(),
+    },
+    {
+      paymentId: paymentIds[3].id,
+      invoiceId: invoiceIds[7].id,
+      amountApplied: "55000.00",
+      createdAt: new Date(),
+    },
+    {
+      paymentId: paymentIds[4].id,
+      invoiceId: invoiceIds[9].id,
+      amountApplied: "75000.00",
+      createdAt: new Date(),
     },
   ]);
 
-  // Create receipts
-  console.log("Creating receipts...");
+  // 15. Receipts - 5 entries (one for each payment)
   await db.insert(receipts).values([
     {
-      organizationId: organization.id,
-      paymentId: payment1.id,
-      receiptNumber: `RCPT-${new Date().getFullYear()}-0001`,
-      issuedAt: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth(), 3),
+      organizationId: organizationIds[0].id,
+      paymentId: paymentIds[0].id,
+      receiptNumber: `RCPT-${now.getFullYear()}${now
+        .getMonth()
+        .toString()
+        .padStart(2, "0")}-001`,
+      issuedAt: new Date(now.getFullYear(), now.getMonth() - 1, 3),
+      createdAt: new Date(),
     },
     {
-      organizationId: organization.id,
-      paymentId: payment2.id,
-      receiptNumber: `RCPT-${new Date().getFullYear()}-0002`,
-      issuedAt: new Date(leaseStartDate.getFullYear(), leaseStartDate.getMonth() + 1, 2),
+      organizationId: organizationIds[0].id,
+      paymentId: paymentIds[1].id,
+      receiptNumber: `RCPT-${now.getFullYear()}${now
+        .getMonth()
+        .toString()
+        .padStart(2, "0")}-002`,
+      issuedAt: new Date(now.getFullYear(), now.getMonth() - 1, 10),
+      createdAt: new Date(),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      paymentId: paymentIds[2].id,
+      receiptNumber: `RCPT-${now.getFullYear()}${now
+        .getMonth()
+        .toString()
+        .padStart(2, "0")}-003`,
+      issuedAt: new Date(now.getFullYear(), now.getMonth() - 1, 1),
+      createdAt: new Date(),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      paymentId: paymentIds[3].id,
+      receiptNumber: `RCPT-${now.getFullYear()}${now
+        .getMonth()
+        .toString()
+        .padStart(2, "0")}-004`,
+      issuedAt: new Date(now.getFullYear(), now.getMonth() - 1, 5),
+      createdAt: new Date(),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      paymentId: paymentIds[4].id,
+      receiptNumber: `RCPT-${now.getFullYear()}${now
+        .getMonth()
+        .toString()
+        .padStart(2, "0")}-005`,
+      issuedAt: new Date(now.getFullYear(), now.getMonth() - 1, 15),
+      createdAt: new Date(),
     },
   ]);
 
-  // Create maintenance requests
-  console.log("Creating maintenance requests...");
-  const [maintenanceRequest1, maintenanceRequest2] = await db
+  // 16. Maintenance Requests - 4 entries
+  const maintenanceRequestIds = await db
     .insert(maintenanceRequests)
     .values([
       {
-        organizationId: organization.id,
-        propertyId: property1.id,
-        unitId: unit1.id,
-        createdByUserId: tenantUser1.id,
-        assignedToUserId: caretakerUser.id,
-        title: "Leaking kitchen faucet",
-        description: "The kitchen faucet has been leaking for two days, wasting water.",
-        status: "resolved",
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[0].id,
+        unitId: unitIds[0].id,
+        createdByUserId: userIds[4].id, // Changed from submittedByUserId
+        assignedToUserId: userIds[9].id,
+        title: "Leaking faucet in kitchen",
+        description:
+          "The kitchen faucet has been leaking for the past few days. It's wasting water and needs to be fixed.",
         priority: "medium",
-        scheduledAt: randomDate(new Date(2023, 5, 1), new Date(2023, 5, 3)),
-        resolvedAt: randomDate(new Date(2023, 5, 3), new Date(2023, 5, 5)),
-        costAmount: "2500.00",
+        status: "inProgress", // Fixed enum value
+        costAmount: "0.00", // Added required field
+        createdAt: new Date(now.getFullYear(), now.getMonth(), 5),
+        updatedAt: new Date(now.getFullYear(), now.getMonth(), 6),
       },
       {
-        organizationId: organization.id,
-        propertyId: property2.id,
-        unitId: unit3.id,
-        createdByUserId: tenantUser2.id,
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[0].id,
+        unitId: unitIds[1].id,
+        createdByUserId: userIds[5].id, // Changed from submittedByUserId
+        assignedToUserId: userIds[9].id,
         title: "AC not cooling properly",
-        description: "The air conditioner is running but not cooling the room effectively.",
-        status: "inProgress",
+        description:
+          "The air conditioning unit is running but not cooling the room effectively.",
         priority: "high",
-        scheduledAt: randomDate(new Date(), new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
+        status: "open",
+        costAmount: "0.00", // Added required field
+        createdAt: new Date(now.getFullYear(), now.getMonth(), 8),
+        updatedAt: new Date(now.getFullYear(), now.getMonth(), 8),
+      },
+      {
+        organizationId: organizationIds[0].id,
+        propertyId: propertyIds[1].id,
+        unitId: unitIds[3].id,
+        createdByUserId: userIds[6].id, // Changed from submittedByUserId
+        assignedToUserId: userIds[10].id,
+        title: "Broken window latch",
+        description:
+          "The latch on the bedroom window is broken, making it difficult to secure the window properly.",
+        priority: "low",
+        status: "resolved", // Fixed enum value
+        resolvedAt: new Date(now.getFullYear(), now.getMonth(), 12),
+        costAmount: "0.00", // Added required field
+        createdAt: new Date(now.getFullYear(), now.getMonth(), 10),
+        updatedAt: new Date(now.getFullYear(), now.getMonth(), 12),
+      },
+      {
+        organizationId: organizationIds[1].id,
+        propertyId: propertyIds[2].id,
+        unitId: unitIds[5].id,
+        createdByUserId: userIds[7].id, // Changed from submittedByUserId
+        assignedToUserId: userIds[10].id,
+        title: "Blocked bathroom drain",
+        description:
+          "The bathroom sink drain is blocked and water is draining very slowly.",
+        priority: "medium",
+        status: "onHold", // Fixed enum value
+        scheduledAt: new Date(now.getFullYear(), now.getMonth() + 1, 5),
+        costAmount: "0.00", // Added required field
+        createdAt: new Date(now.getFullYear(), now.getMonth(), 15),
+        updatedAt: new Date(now.getFullYear(), now.getMonth(), 16),
       },
     ])
-    .returning();
+    .returning({ id: maintenanceRequests.id });
 
-  // Create maintenance comments
-  console.log("Creating maintenance comments...");
+  // 17. Maintenance Comments - 2-3 comments per request
   await db.insert(maintenanceComments).values([
     {
-      maintenanceRequestId: maintenanceRequest1.id,
-      authorUserId: tenantUser1.id,
-      body: "The leak seems to be getting worse. Please address as soon as possible.",
+      maintenanceRequestId: maintenanceRequestIds[0].id,
+      authorUserId: userIds[4].id, // Changed from userId
+      body: "I've placed a bucket under the leak for now to catch the water.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
     },
     {
-      maintenanceRequestId: maintenanceRequest1.id,
-      authorUserId: caretakerUser.id,
-      body: "I've inspected the faucet. Needs washer replacement. Parts ordered.",
+      maintenanceRequestId: maintenanceRequestIds[0].id,
+      authorUserId: userIds[9].id, // Changed from userId
+      body: "I'll come by tomorrow afternoon to take a look at the faucet.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
     },
     {
-      maintenanceRequestId: maintenanceRequest1.id,
-      authorUserId: caretakerUser.id,
-      body: "Faucet repaired and working properly now.",
+      maintenanceRequestId: maintenanceRequestIds[1].id,
+      authorUserId: userIds[5].id, // Changed from userId
+      body: "This is becoming urgent as the temperatures are rising.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 9, 9, 0),
     },
     {
-      maintenanceRequestId: maintenanceRequest2.id,
-      authorUserId: tenantUser2.id,
-      body: "This is especially problematic during the hot afternoons.",
+      maintenanceRequestId: maintenanceRequestIds[2].id,
+      authorUserId: userIds[6].id, // Changed from userId
+      body: "The window is in the second bedroom.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 20),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[2].id,
+      authorUserId: userIds[10].id, // Changed from userId
+      body: "I've ordered the replacement part. Should arrive in 2 days.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 16, 45),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[2].id,
+      authorUserId: userIds[10].id, // Changed from userId
+      body: "Fixed the latch today. Please confirm it's working properly.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[3].id,
+      authorUserId: userIds[7].id, // Changed from userId
+      body: "I tried using a plunger but it didn't help much.", // Changed from comment
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 0),
     },
   ]);
 
-  // Create activity logs
-  console.log("Creating activity logs...");
+  // 18. Maintenance Attachments - 1-2 attachments per request
+  await db.insert(maintenanceAttachments).values([
+    {
+      maintenanceRequestId: maintenanceRequestIds[0].id,
+      fileName: "leaking_faucet.jpg",
+      fileUrl: "https://example.com/attachments/leaking_faucet.jpg",
+      contentType: "image/jpeg", // Changed from fileType
+      sizeBytes: 102400, // Added required field
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 35),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[1].id,
+      fileName: "ac_unit.mp4",
+      fileUrl: "https://example.com/attachments/ac_unit.mp4",
+      contentType: "video/mp4", // Changed from fileType
+      sizeBytes: 5120000, // Added required field
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 8, 15, 20),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[2].id,
+      fileName: "broken_latch.jpg",
+      fileUrl: "https://example.com/attachments/broken_latch.jpg",
+      contentType: "image/jpeg", // Changed from fileType
+      sizeBytes: 204800, // Added required field
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 25),
+    },
+    {
+      maintenanceRequestId: maintenanceRequestIds[3].id,
+      fileName: "blocked_drain.jpg",
+      fileUrl: "https://example.com/attachments/blocked_drain.jpg",
+      contentType: "image/jpeg", // Changed from fileType
+      sizeBytes: 153600, // Added required field
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 5),
+    },
+  ]);
+
+  // 19. Activity Logs - 10 entries for various activities
   await db.insert(activityLogs).values([
     {
-      organizationId: organization.id,
-      actorUserId: adminUser.id,
-      action: "create",
-      targetTable: "organizations",
-      targetId: organization.id,
-      description: "Created new organization",
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[2].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "leases", // Changed from resourceType
+      targetId: leaseIds[0].id, // Changed from resourceId
+      description: "Created new lease for unit A-101", // Changed from details
+      ipAddress: "192.168.1.100",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 3, 1, 9, 0),
     },
     {
-      organizationId: organization.id,
-      actorUserId: managerUser.id,
-      action: "create",
-      targetTable: "leases",
-      targetId: lease1.id,
-      description: "Created new lease agreement",
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[4].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "maintenanceRequests", // Changed from resourceType
+      targetId: maintenanceRequestIds[0].id, // Changed from resourceId
+      description: "Submitted maintenance request for leaking faucet", // Changed from details
+      ipAddress: "192.168.1.101",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
     },
     {
-      organizationId: organization.id,
-      actorUserId: tenantUser1.id,
-      action: "create",
-      targetTable: "maintenanceRequests",
-      targetId: maintenanceRequest1.id,
-      description: "Submitted maintenance request",
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[2].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "invoices", // Changed from resourceType
+      targetId: invoiceIds[0].id, // Changed from resourceId
+      description: "Generated invoice for current month rent", // Changed from details
+      ipAddress: "192.168.1.100",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 1, 8, 0),
     },
     {
-      organizationId: organization.id,
-      actorUserId: caretakerUser.id,
-      action: "statusChange",
-      targetTable: "maintenanceRequests",
-      targetId: maintenanceRequest1.id,
-      description: "Changed status to resolved",
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[4].id, // Changed from userId
+      action: "payment", // Fixed enum value
+      targetTable: "payments", // Changed from resourceType
+      targetId: paymentIds[0].id, // Changed from resourceId
+      description: "Made payment via M-Pesa for previous month rent", // Changed from details
+      ipAddress: "192.168.1.101",
+      userAgent:
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 14.0 like Mac OS X) AppleWebKit/605.1.15",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 1, 3, 14, 30),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      actorUserId: userIds[2].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "properties", // Changed from resourceType
+      targetId: propertyIds[2].id, // Changed from resourceId
+      description: "Added new property: Nyali Beach Residences", // Changed from details
+      ipAddress: "192.168.1.100",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 6, 15, 10, 0),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[9].id, // Changed from userId
+      action: "assign", // Fixed enum value
+      targetTable: "maintenanceRequests", // Changed from resourceType
+      targetId: maintenanceRequestIds[0].id, // Changed from resourceId
+      description: "Assigned to fix leaking faucet", // Changed from details
+      ipAddress: "192.168.1.102",
+      userAgent:
+        "Mozilla/5.0 (Android 10; Mobile; rv:68.0) Gecko/68.0 Firefox/68.0",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[10].id, // Changed from userId
+      action: "statusChange", // Fixed enum value
+      targetTable: "maintenanceRequests", // Changed from resourceType
+      targetId: maintenanceRequestIds[2].id, // Changed from resourceId
+      description: "Completed window latch repair", // Changed from details
+      ipAddress: "192.168.1.103",
+      userAgent:
+        "Mozilla/5.0 (Android 10; Mobile; rv:68.0) Gecko/68.0 Firefox/68.0",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[2].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "users", // Changed from resourceType
+      targetId: userIds[3].id, // Changed from resourceId
+      description: "Invited caretaker to join organization", // Changed from details
+      ipAddress: "192.168.1.100",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 4, 20, 11, 0),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      actorUserId: userIds[7].id, // Changed from userId
+      action: "create", // Fixed enum value
+      targetTable: "leases", // Changed from resourceType
+      targetId: leaseIds[3].id, // Changed from resourceId
+      description: "Signed lease agreement for NB-101", // Changed from details
+      ipAddress: "192.168.1.104",
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 4, 10, 15, 30),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      actorUserId: userIds[2].id, // Changed from userId
+      action: "update", // Fixed enum value
+      targetTable: "units", // Changed from resourceType
+      targetId: unitIds[2].id, // Changed from resourceId
+      description: "Updated unit B-201 status to vacant", // Changed from details
+      ipAddress: "192.168.1.100",
+      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      createdAt: new Date(now.getFullYear(), now.getMonth() - 1, 28, 16, 45),
     },
   ]);
 
-  console.log("Database seeded successfully!");
+  console.log("✅ Seeding completed!");
 }
 
-// Run the seed function if this script is executed directly
-if (require.main === module) {
-  seed()
-    .then(() => {
-      console.log("Seeding completed!");
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error("Seeding failed:", error);
-      process.exit(1);
-    });
-}
+seed()
+  .catch((e) => {
+    console.error("❌ Seeding failed!");
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(() => {
+    process.exit(0);
+  });
