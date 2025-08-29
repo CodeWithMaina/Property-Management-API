@@ -17,8 +17,9 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.10.0",
+  "packageManager": "pnpm@10.15.0",
   "dependencies": {
+    "@neondatabase/serverless": "github:neondatabase/serverless",
     "@types/nodemailer": "^7.0.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",

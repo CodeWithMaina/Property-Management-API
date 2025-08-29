@@ -18,8 +18,7 @@ export interface ValidateOptions {
  *
  * - Uses ZodSchema (avoids deprecated ZodTypeAny).
  * - Uses safeParseAsync so validation doesn't throw; we format error response consistently.
- * - Assigns validated values back to req.* (cast to any because Express Request generics
- *   cannot be altered at runtime).
+ * - For query and params, creates a new property on the request object instead of modifying read-only properties.
  *
  * Usage:
  *   router.post('/x', validate(createUserSchema, 'body'), handler)
@@ -38,9 +37,12 @@ export const validate =
       if (opts.throwOnError) {
         // If consumer explicitly wants throwing behavior (rare)
         const validated = await schema.parseAsync(raw);
-        if (source === 'body') req.body = validated as any;
-        else if (source === 'query') req.query = validated as any;
-        else req.params = validated as any;
+        if (source === 'body') {
+          req.body = validated as any;
+        } else {
+          // For query and params, store in a custom property instead of modifying read-only objects
+          (req as any)[`validated${source.charAt(0).toUpperCase() + source.slice(1)}`] = validated;
+        }
         return next();
       }
 
@@ -60,12 +62,14 @@ export const validate =
         );
       }
 
-      // Assign validated value back to request. We cast to `any` because
-      // Express Request generic types are static and can't be changed at runtime.
+      // Assign validated value to appropriate location
       const validatedData = result.data;
-      if (source === 'body') req.body = validatedData as any;
-      else if (source === 'query') req.query = validatedData as any;
-      else req.params = validatedData as any;
+      if (source === 'body') {
+        req.body = validatedData as any;
+      } else {
+        // For query and params, store in a custom property instead of modifying read-only objects
+        (req as any)[`validated${source.charAt(0).toUpperCase() + source.slice(1)}`] = validatedData;
+      }
 
       return next();
     } catch (error) {

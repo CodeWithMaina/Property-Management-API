@@ -1110,155 +1110,151 @@ async function seed() {
   ]);
 
   // 16. Maintenance Requests - 4 entries
-  const maintenanceRequestIds = await db
-    .insert(maintenanceRequests)
-    .values([
-      {
-        organizationId: organizationIds[0].id,
-        propertyId: propertyIds[0].id,
-        unitId: unitIds[0].id,
-        createdByUserId: userIds[4].id, // Changed from submittedByUserId
-        assignedToUserId: userIds[9].id,
-        title: "Leaking faucet in kitchen",
-        description:
-          "The kitchen faucet has been leaking for the past few days. It's wasting water and needs to be fixed.",
-        priority: "medium",
-        status: "inProgress", // Fixed enum value
-        costAmount: "0.00", // Added required field
-        createdAt: new Date(now.getFullYear(), now.getMonth(), 5),
-        updatedAt: new Date(now.getFullYear(), now.getMonth(), 6),
-      },
-      {
-        organizationId: organizationIds[0].id,
-        propertyId: propertyIds[0].id,
-        unitId: unitIds[1].id,
-        createdByUserId: userIds[5].id, // Changed from submittedByUserId
-        assignedToUserId: userIds[9].id,
-        title: "AC not cooling properly",
-        description:
-          "The air conditioning unit is running but not cooling the room effectively.",
-        priority: "high",
-        status: "open",
-        costAmount: "0.00", // Added required field
-        createdAt: new Date(now.getFullYear(), now.getMonth(), 8),
-        updatedAt: new Date(now.getFullYear(), now.getMonth(), 8),
-      },
-      {
-        organizationId: organizationIds[0].id,
-        propertyId: propertyIds[1].id,
-        unitId: unitIds[3].id,
-        createdByUserId: userIds[6].id, // Changed from submittedByUserId
-        assignedToUserId: userIds[10].id,
-        title: "Broken window latch",
-        description:
-          "The latch on the bedroom window is broken, making it difficult to secure the window properly.",
-        priority: "low",
-        status: "resolved", // Fixed enum value
-        resolvedAt: new Date(now.getFullYear(), now.getMonth(), 12),
-        costAmount: "0.00", // Added required field
-        createdAt: new Date(now.getFullYear(), now.getMonth(), 10),
-        updatedAt: new Date(now.getFullYear(), now.getMonth(), 12),
-      },
-      {
-        organizationId: organizationIds[1].id,
-        propertyId: propertyIds[2].id,
-        unitId: unitIds[5].id,
-        createdByUserId: userIds[7].id, // Changed from submittedByUserId
-        assignedToUserId: userIds[10].id,
-        title: "Blocked bathroom drain",
-        description:
-          "The bathroom sink drain is blocked and water is draining very slowly.",
-        priority: "medium",
-        status: "onHold", // Fixed enum value
-        scheduledAt: new Date(now.getFullYear(), now.getMonth() + 1, 5),
-        costAmount: "0.00", // Added required field
-        createdAt: new Date(now.getFullYear(), now.getMonth(), 15),
-        updatedAt: new Date(now.getFullYear(), now.getMonth(), 16),
-      },
-    ])
-    .returning({ id: maintenanceRequests.id });
+const maintenanceRequestIds = await db
+  .insert(maintenanceRequests)
+  .values([
+    {
+      organizationId: organizationIds[0].id,
+      propertyId: propertyIds[0].id,
+      unitId: unitIds[0].id,
+      createdByUserId: userIds[4].id, // Tenant 1
+      assignedToUserId: userIds[8].id, // Maintenance Staff 1 (index 8)
+      title: "Leaking faucet in kitchen",
+      description: "The kitchen faucet has been leaking for the past few days. It's wasting water and needs to be fixed.",
+      priority: "medium",
+      status: "inProgress",
+      costAmount: "0.00",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 5),
+      updatedAt: new Date(now.getFullYear(), now.getMonth(), 6),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      propertyId: propertyIds[0].id,
+      unitId: unitIds[1].id,
+      createdByUserId: userIds[5].id, // Tenant 2
+      assignedToUserId: userIds[8].id, // Maintenance Staff 1 (index 8)
+      title: "AC not cooling properly",
+      description: "The air conditioning unit is running but not cooling the room effectively.",
+      priority: "high",
+      status: "open",
+      costAmount: "0.00",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 8),
+      updatedAt: new Date(now.getFullYear(), now.getMonth(), 8),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      propertyId: propertyIds[1].id,
+      unitId: unitIds[3].id,
+      createdByUserId: userIds[6].id, // Tenant 3
+      assignedToUserId: userIds[9].id, // Maintenance Staff 2 (index 9)
+      title: "Broken window latch",
+      description: "The latch on the bedroom window is broken, making it difficult to secure the window properly.",
+      priority: "low",
+      status: "resolved",
+      resolvedAt: new Date(now.getFullYear(), now.getMonth(), 12),
+      costAmount: "0.00",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 10),
+      updatedAt: new Date(now.getFullYear(), now.getMonth(), 12),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      propertyId: propertyIds[2].id,
+      unitId: unitIds[5].id,
+      createdByUserId: userIds[7].id, // Tenant 4
+      assignedToUserId: userIds[9].id, // Maintenance Staff 2 (index 9)
+      title: "Blocked bathroom drain",
+      description: "The bathroom sink drain is blocked and water is draining very slowly.",
+      priority: "medium",
+      status: "onHold",
+      scheduledAt: new Date(now.getFullYear(), now.getMonth() + 1, 5),
+      costAmount: "0.00",
+      createdAt: new Date(now.getFullYear(), now.getMonth(), 15),
+      updatedAt: new Date(now.getFullYear(), now.getMonth(), 16),
+    },
+  ])
+  .returning({ id: maintenanceRequests.id });
 
-  // 17. Maintenance Comments - 2-3 comments per request
-  await db.insert(maintenanceComments).values([
-    {
-      maintenanceRequestId: maintenanceRequestIds[0].id,
-      authorUserId: userIds[4].id, // Changed from userId
-      body: "I've placed a bucket under the leak for now to catch the water.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[0].id,
-      authorUserId: userIds[9].id, // Changed from userId
-      body: "I'll come by tomorrow afternoon to take a look at the faucet.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[1].id,
-      authorUserId: userIds[5].id, // Changed from userId
-      body: "This is becoming urgent as the temperatures are rising.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 9, 9, 0),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[2].id,
-      authorUserId: userIds[6].id, // Changed from userId
-      body: "The window is in the second bedroom.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 20),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[2].id,
-      authorUserId: userIds[10].id, // Changed from userId
-      body: "I've ordered the replacement part. Should arrive in 2 days.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 16, 45),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[2].id,
-      authorUserId: userIds[10].id, // Changed from userId
-      body: "Fixed the latch today. Please confirm it's working properly.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[3].id,
-      authorUserId: userIds[7].id, // Changed from userId
-      body: "I tried using a plunger but it didn't help much.", // Changed from comment
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 0),
-    },
-  ]);
+// 17. Maintenance Comments - 2-3 comments per request
+await db.insert(maintenanceComments).values([
+  {
+    maintenanceRequestId: maintenanceRequestIds[0].id,
+    authorUserId: userIds[4].id, // Tenant 1
+    body: "I've placed a bucket under the leak for now to catch the water.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[0].id,
+    authorUserId: userIds[8].id, // Maintenance Staff 1
+    body: "I'll come by tomorrow afternoon to take a look at the faucet.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[1].id,
+    authorUserId: userIds[5].id, // Tenant 2
+    body: "This is becoming urgent as the temperatures are rising.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 9, 9, 0),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[2].id,
+    authorUserId: userIds[6].id, // Tenant 3
+    body: "The window is in the second bedroom.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 20),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[2].id,
+    authorUserId: userIds[9].id, // Maintenance Staff 2
+    body: "I've ordered the replacement part. Should arrive in 2 days.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 16, 45),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[2].id,
+    authorUserId: userIds[9].id, // Maintenance Staff 2
+    body: "Fixed the latch today. Please confirm it's working properly.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[3].id,
+    authorUserId: userIds[7].id, // Tenant 4
+    body: "I tried using a plunger but it didn't help much.",
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 0),
+  },
+]);
 
-  // 18. Maintenance Attachments - 1-2 attachments per request
-  await db.insert(maintenanceAttachments).values([
-    {
-      maintenanceRequestId: maintenanceRequestIds[0].id,
-      fileName: "leaking_faucet.jpg",
-      fileUrl: "https://example.com/attachments/leaking_faucet.jpg",
-      contentType: "image/jpeg", // Changed from fileType
-      sizeBytes: 102400, // Added required field
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 35),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[1].id,
-      fileName: "ac_unit.mp4",
-      fileUrl: "https://example.com/attachments/ac_unit.mp4",
-      contentType: "video/mp4", // Changed from fileType
-      sizeBytes: 5120000, // Added required field
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 8, 15, 20),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[2].id,
-      fileName: "broken_latch.jpg",
-      fileUrl: "https://example.com/attachments/broken_latch.jpg",
-      contentType: "image/jpeg", // Changed from fileType
-      sizeBytes: 204800, // Added required field
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 25),
-    },
-    {
-      maintenanceRequestId: maintenanceRequestIds[3].id,
-      fileName: "blocked_drain.jpg",
-      fileUrl: "https://example.com/attachments/blocked_drain.jpg",
-      contentType: "image/jpeg", // Changed from fileType
-      sizeBytes: 153600, // Added required field
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 5),
-    },
-  ]);
+// 18. Maintenance Attachments - 1-2 attachments per request
+await db.insert(maintenanceAttachments).values([
+  {
+    maintenanceRequestId: maintenanceRequestIds[0].id,
+    fileName: "leaking_faucet.jpg",
+    fileUrl: "https://example.com/attachments/leaking_faucet.jpg",
+    contentType: "image/jpeg",
+    sizeBytes: 102400,
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 35),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[1].id,
+    fileName: "ac_unit.mp4",
+    fileUrl: "https://example.com/attachments/ac_unit.mp4",
+    contentType: "video/mp4",
+    sizeBytes: 5120000,
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 8, 15, 20),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[2].id,
+    fileName: "broken_latch.jpg",
+    fileUrl: "https://example.com/attachments/broken_latch.jpg",
+    contentType: "image/jpeg",
+    sizeBytes: 204800,
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 25),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[3].id,
+    fileName: "blocked_drain.jpg",
+    fileUrl: "https://example.com/attachments/blocked_drain.jpg",
+    contentType: "image/jpeg",
+    sizeBytes: 153600,
+    createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 5),
+  },
+]);
 
   // 19. Activity Logs - 10 entries for various activities
   await db.insert(activityLogs).values([
@@ -1333,7 +1329,7 @@ async function seed() {
     },
     {
       organizationId: organizationIds[0].id,
-      actorUserId: userIds[10].id, // Changed from userId
+      actorUserId: userIds[9].id, // Changed from userId
       action: "statusChange", // Fixed enum value
       targetTable: "maintenanceRequests", // Changed from resourceType
       targetId: maintenanceRequestIds[2].id, // Changed from resourceId

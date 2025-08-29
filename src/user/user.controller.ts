@@ -18,12 +18,16 @@ import {
 import { asyncHandler } from "../utils/errorHandler";
 import { UserFilters } from "./user.types";
 
+// In your getUsers controller
 export const getUsers = asyncHandler(async (req: Request, res: Response) => {
+  // Use validatedQuery instead of req.query for validated data
+  const validatedQuery = (req as any).validatedQuery || {};
+  
   const filters: UserFilters = {
-    isActive: req.query.isActive ? req.query.isActive === "true" : undefined,
-    search: req.query.search as string,
-    page: req.query.page ? parseInt(req.query.page as string) : 1,
-    limit: req.query.limit ? parseInt(req.query.limit as string) : 20,
+    isActive: validatedQuery.isActive,
+    search: validatedQuery.search,
+    page: validatedQuery.page,
+    limit: validatedQuery.limit,
   };
 
   const result = await getUsersService(filters);
@@ -35,7 +39,7 @@ export const getUsers = asyncHandler(async (req: Request, res: Response) => {
   }
   
   return res.status(200).json(
-    createUsersResponse(result.data,result.pagination, "Users retrieved successfully")
+    createUsersResponse(result.data, result.pagination, "Users retrieved successfully")
   );
 });
 

@@ -12,10 +12,13 @@ export const CreateUserSchema = z.object({
 export const UpdateUserSchema = CreateUserSchema.partial();
 
 export const UserFiltersSchema = z.object({
-  isActive: z.boolean().optional(),
+  isActive: z
+    .enum(['true', 'false'])
+    .optional()
+    .transform((val) => val === 'true'),
   search: z.string().optional(),
-  page: z.number().int().positive().default(1),
-  limit: z.number().int().positive().max(100).default(20),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export type CreateUserInput = z.infer<typeof CreateUserSchema>;

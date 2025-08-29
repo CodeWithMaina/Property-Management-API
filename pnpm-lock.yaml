@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@neondatabase/serverless':
+        specifier: github:neondatabase/serverless
+        version: https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93
       '@types/nodemailer':
         specifier: ^7.0.0
         version: 7.0.0
@@ -22,7 +25,7 @@ importers:
         version: 17.2.1
       drizzle-orm:
         specifier: ^0.44.4
-        version: 0.44.4(@types/pg@8.15.5)(pg@8.16.3)
+        version: 0.44.4(@neondatabase/serverless@https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93)(@types/pg@8.15.5)(pg@8.16.3)
       express:
         specifier: ^5.1.0
         version: 5.1.0
@@ -512,6 +515,11 @@ packages:
   '@jridgewell/trace-mapping@0.3.9':
     resolution: {integrity: sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ==}
 
+  '@neondatabase/serverless@https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93':
+    resolution: {tarball: https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93}
+    version: 1.0.1
+    engines: {node: '>=19.0.0'}
+
   '@smithy/abort-controller@4.0.5':
     resolution: {integrity: sha512-jcrqdTQurIrBbUm4W2YdLVMQDoL0sA9DTxYd2s+R/y+2U9NLOP7Xf/YqfSg1FZhlZIYEnvk2mwbyvIfdLEPo8g==}
     engines: {node: '>=18.0.0'}
@@ -722,6 +730,9 @@ packages:
   '@types/ms@2.1.0':
     resolution: {integrity: sha512-GsCCIZDE/p3i96vtEqx+7dBUGXrc7zeSK3wwPHIaRThS+9OhWIXRqzs4d6k1SVU8g91DrNRWxWUGhp5KXQb2VA==}
 
+  '@types/node@22.18.0':
+    resolution: {integrity: sha512-m5ObIqwsUp6BZzyiy4RdZpzWGub9bqLJMvZDD0QMXhxjqMHMENlj+SqF5QxoUwaQNFe+8kz8XM8ZQhqkQPTgMQ==}
+
   '@types/node@24.2.0':
     resolution: {integrity: sha512-3xyG3pMCq3oYCNg7/ZP+E1ooTaGB4cG8JWRsqqOYQdbWNY4zbaV0Ennrd7stjiJEFZCaybcIgpTjJWHRfBSIDw==}
 
@@ -872,6 +883,7 @@ packages:
 
   drizzle-orm@0.44.4:
     resolution: {integrity: sha512-ZyzKFpTC/Ut3fIqc2c0dPZ6nhchQXriTsqTNs4ayRgl6sZcFlMs9QZKPSHXK4bdOf41GHGWf+FrpcDDYwW+W6Q==}
+    version: 0.44.4
     peerDependencies:
       '@aws-sdk/client-rds-data': '>=3'
       '@cloudflare/workers-types': '>=4'
@@ -1469,6 +1481,9 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  undici-types@6.21.0:
+    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
   undici-types@7.10.0:
     resolution: {integrity: sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag==}
 
@@ -2058,6 +2073,11 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.4
 
+  '@neondatabase/serverless@https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93':
+    dependencies:
+      '@types/node': 22.18.0
+      '@types/pg': 8.15.5
+
   '@smithy/abort-controller@4.0.5':
     dependencies:
       '@smithy/types': 4.3.2
@@ -2379,6 +2399,10 @@ snapshots:
 
   '@types/ms@2.1.0': {}
 
+  '@types/node@22.18.0':
+    dependencies:
+      undici-types: 6.21.0
+
   '@types/node@24.2.0':
     dependencies:
       undici-types: 7.10.0
@@ -2535,8 +2559,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  drizzle-orm@0.44.4(@types/pg@8.15.5)(pg@8.16.3):
+  drizzle-orm@0.44.4(@neondatabase/serverless@https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93)(@types/pg@8.15.5)(pg@8.16.3):
     optionalDependencies:
+      '@neondatabase/serverless': https://codeload.github.com/neondatabase/serverless/tar.gz/20240e08e7babac5dca4ec02b9ca3fa541ce7f93
       '@types/pg': 8.15.5
       pg: 8.16.3
 
@@ -3114,6 +3139,8 @@ snapshots:
       mime-types: 3.0.1
 
   typescript@5.9.2: {}
+
+  undici-types@6.21.0: {}
 
   undici-types@7.10.0: {}
 
