@@ -148,23 +148,6 @@ export function createUnitsResponse(
   return createSuccessResponse(units, message);
 }
 
-export function createLeaseResponse(
-  lease: LeaseResponse,
-  message: string = 'Lease retrieved successfully.'
-): ApiResponse<LeaseResponse> {
-  return createSuccessResponse(lease, message);
-}
-
-export function createLeasesResponse(
-  leases: LeaseResponse[],
-  pagination?: MetaData['pagination'],
-  message: string = 'Leases retrieved successfully.'
-): ApiResponse<LeaseResponse[]> {
-  if (pagination) {
-    return createPaginatedResponse(leases, pagination, message);
-  }
-  return createSuccessResponse(leases, message);
-}
 
 export function createInvoiceResponse(
   invoice: InvoiceResponse,
@@ -273,4 +256,22 @@ export function createUserOrganizationsResponse(
     return createPaginatedResponse(userOrganizations, pagination, message);
   }
   return createSuccessResponse(userOrganizations, message);
+}
+
+export function createLeaseResponse(
+  lease: LeaseResponse,
+  message: string = 'Lease retrieved successfully.'
+): ApiResponse<LeaseResponse> {
+  return createSuccessResponse(lease, message);
+}
+
+export function createLeasesResponse(
+  leases: LeaseResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'Leases retrieved successfully.'
+): ApiResponse<LeaseResponse[]> {
+  if (pagination) {
+    return createPaginatedResponse(leases, pagination, message);
+  }
+  return createSuccessResponse(leases, message);
 }

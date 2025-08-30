@@ -4,11 +4,11 @@ import cors from "cors";
 import { propertyRouter } from "./property/property.route";
 import { unitRouter } from "./unit/unit.route";
 import { paymentRouter } from "./payment/payment.route";
-import { leaseRouter } from "./lease/lease.route";
 import { unitAmenityRouter } from "./unitAmenity/unitAmenity.route";
 import { amenityRouter } from "./amenity/amenity.route";
 import { userRouter } from "./user/user.route";
 import organizationRouter from "./organization/organization.route";
+import leaseRouter from "./lease/lease.route";
 
 dotenv.config();
 

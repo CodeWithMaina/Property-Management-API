@@ -1,170 +1,422 @@
+// lease.controller.ts
 import { Request, Response } from "express";
 import {
-  getLeasesService,
-  getLeaseByIdService,
-  createLeaseService,
-  updateLeaseService,
-  deleteLeaseService,
-  getLeasesByTenantService,
-  getLeasesByUnitService,
+  getLeasesServices,
+  getLeaseByIdServices,
+  createLeaseServices,
+  updateLeaseServices,
+  deleteLeaseServices,
+  updateLeaseStatusServices,
+  getLeasesByTenantServices,
+  getLeasesByPropertyServices,
+  getLeaseBalanceServices,
+  renewLeaseServices,
+  generateFirstInvoiceServices,
 } from "./lease.service";
-import { NewLease } from "../drizzle/schema";
+import {
+  LeaseSchema,
+  PartialLeaseSchema,
+  LeaseQuerySchema,
+  LeaseStatusChangeSchema,
+  LeaseRenewalSchema,
+} from "./lease.validator";
+import {
+  asyncHandler,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+} from "../utils/errorHandler";
+import {
+  createSuccessResponse,
+  createPaginatedResponse,
+  createLeaseResponse,
+  createLeasesResponse,
+} from "../utils/apiResponse/apiResponse.helper";
 
-export const getLeasesController = async (req: Request, res: Response) => {
-  try {
-    const leases = await getLeasesService();
-    if (leases.length === 0) {
-      res.status(404).json({ message: "No leases found" });
-      return;
-    }
-    res.status(200).json(leases);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch leases",
-      error: error.message,
-    });
+/**
+ * @route GET /leases
+ * @description Get all leases with optional filtering
+ * @access Private
+ */
+export const getLeases = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    // Validate query parameters
+    const queryParams = LeaseQuerySchema.parse(req.query);
+
+    const result = await getLeasesServices(queryParams);
+
+    // Create pagination object
+    const pagination = {
+      total: result.total,
+      count: result.leases.length,
+      perPage: queryParams.limit,
+      currentPage: queryParams.page,
+      totalPages: Math.ceil(result.total / queryParams.limit),
+      links: {
+        first: null,
+        last: null,
+        prev: null,
+        next: null,
+      },
+    };
+
+    const response = createPaginatedResponse(
+      result.leases,
+      pagination,
+      "Leases retrieved successfully"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
 
-export const getLeaseByIdController = async (req: Request, res: Response) => {
-  try {
+/**
+ * @route POST /leases
+ * @description Create a new lease (typically in 'draft' status)
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const createLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    // Validate request body
+    const validatedData = LeaseSchema.parse(req.body);
+
+    const newLease = await createLeaseServices(validatedData);
+
+    const response = createSuccessResponse(
+      newLease,
+      "Lease created successfully"
+    );
+
+    res.status(201).json(response);
+  }
+);
+
+/**
+ * @route GET /leases/:id
+ * @description Get specific lease details
+ * @access Private
+ */
+export const getLeaseById = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const leaseId = req.params.id;
+
     if (!leaseId) {
-      res.status(400).json({ message: "Invalid lease ID" });
-      return;
+      throw new ValidationError("Lease ID is required");
     }
 
-    const lease = await getLeaseByIdService(leaseId);
+    const lease = await getLeaseByIdServices(leaseId);
+
     if (!lease) {
-      res.status(404).json({ message: "Lease not found" });
-      return;
-    }
-    res.status(200).json(lease);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch lease",
-      error: error.message,
-    });
-  }
-};
-
-export const createLeaseController = async (req: Request, res: Response) => {
-  try {
-    const leaseData: NewLease = req.body;
-    if (
-      !leaseData.tenantId ||
-      !leaseData.unitId ||
-      !leaseData.startDate ||
-      !leaseData.endDate ||
-      !leaseData.rentAmount
-    ) {
-      res.status(400).json({ message: "Missing required fields" });
-      return;
+      throw new NotFoundError("Lease");
     }
 
-    const newLease = await createLeaseService(leaseData);
-    res.status(201).json(newLease);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to create lease",
-      error: error.message,
-    });
-  }
-};
+    const response = createLeaseResponse(
+      lease,
+      "Lease retrieved successfully"
+    );
 
-export const updateLeaseController = async (req: Request, res: Response) => {
-  try {
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route PUT /leases/:id
+ * @description Update lease information
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const updateLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const leaseId = req.params.id;
+
     if (!leaseId) {
-      res.status(400).json({ message: "Invalid lease ID" });
-      return;
+      throw new ValidationError("Lease ID is required");
     }
 
-    const leaseData: Partial<NewLease> = req.body;
-    if (Object.keys(leaseData).length === 0) {
-      res.status(400).json({ message: "No data provided for update" });
-      return;
-    }
+    // Validate request body
+    const validatedData = PartialLeaseSchema.parse(req.body);
 
-    const updatedLease = await updateLeaseService(leaseId, leaseData);
+    const updatedLease = await updateLeaseServices(leaseId, validatedData);
+
     if (!updatedLease) {
-      res.status(404).json({ message: "Lease not found" });
-      return;
+      throw new NotFoundError("Lease");
     }
-    res.status(200).json(updatedLease);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to update lease",
-      error: error.message,
-    });
-  }
-};
 
-export const deleteLeaseController = async (req: Request, res: Response) => {
-  try {
+    const response = createSuccessResponse(
+      updatedLease,
+      "Lease updated successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route DELETE /leases/:id
+ * @description Delete a lease (only allowed for drafts)
+ * @access Private (Admin/Organization Owner)
+ */
+export const deleteLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const leaseId = req.params.id;
+
     if (!leaseId) {
-      res.status(400).json({ message: "Invalid lease ID" });
-      return;
+      throw new ValidationError("Lease ID is required");
     }
 
-    const deletedLease = await deleteLeaseService(leaseId);
+    const deletedLease = await deleteLeaseServices(leaseId);
+
     if (!deletedLease) {
-      res.status(404).json({ message: "Lease not found" });
-      return;
+      throw new NotFoundError("Lease");
     }
-    res.status(200).json({ message: "Lease deleted successfully" });
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to delete lease",
-      error: error.message,
-    });
+
+    const response = createSuccessResponse(
+      deletedLease,
+      "Lease deleted successfully"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
 
-export const getLeasesByTenantController = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const tenantId = req.params.tenantId;
-    if (!tenantId) {
-      res.status(400).json({ message: "Invalid tenant ID" });
-      return;
+/**
+ * @route POST /leases/:id/activate
+ * @description Transition a lease to 'active'. Triggers unit status change and may generate first invoice.
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const activateLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
     }
 
-    const leases = await getLeasesByTenantService(tenantId);
-    if (leases.length === 0) {
-      res.status(404).json({ message: "No leases found for this tenant" });
-      return;
+    // Validate request body
+    const validatedData = LeaseStatusChangeSchema.parse(req.body);
+
+    // Update lease status to active
+    const updatedLease = await updateLeaseStatusServices(leaseId, "active", validatedData);
+
+    if (!updatedLease) {
+      throw new NotFoundError("Lease");
     }
-    res.status(200).json(leases);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch leases by tenant",
-      error: error.message,
-    });
+
+    // Generate first invoice
+    const invoice = await generateFirstInvoiceServices(leaseId);
+
+    const response = createSuccessResponse(
+      {
+        lease: updatedLease,
+        invoice,
+      },
+      "Lease activated successfully and first invoice generated"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
 
-export const getLeasesByUnitController = async (req: Request, res: Response) => {
-  try {
-    const unitId = req.params.unitId;
-    if (!unitId) {
-      res.status(400).json({ message: "Invalid unit ID" });
-      return;
+/**
+ * @route POST /leases/:id/terminate
+ * @description Terminate a lease early
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const terminateLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
     }
 
-    const leases = await getLeasesByUnitService(unitId);
-    if (leases.length === 0) {
-      res.status(404).json({ message: "No leases found for this unit" });
-      return;
+    // Validate request body
+    const validatedData = LeaseStatusChangeSchema.parse(req.body);
+
+    const updatedLease = await updateLeaseStatusServices(leaseId, "terminated", validatedData);
+
+    if (!updatedLease) {
+      throw new NotFoundError("Lease");
     }
-    res.status(200).json(leases);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch leases by unit",
-      error: error.message,
-    });
+
+    const response = createSuccessResponse(
+      updatedLease,
+      "Lease terminated successfully"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
+
+/**
+ * @route POST /leases/:id/renew
+ * @description Create a new lease based on an expiring one
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const renewLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
+    }
+
+    // Validate request body
+    const validatedData = LeaseRenewalSchema.parse(req.body);
+
+    const newLease = await renewLeaseServices(leaseId, validatedData);
+
+    const response = createSuccessResponse(
+      newLease,
+      "Lease renewed successfully"
+    );
+
+    res.status(201).json(response);
+  }
+);
+
+/**
+ * @route POST /leases/:id/cancel
+ * @description Cancel a draft or pending lease
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const cancelLease = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
+    }
+
+    // Validate request body
+    const validatedData = LeaseStatusChangeSchema.parse(req.body);
+
+    const updatedLease = await updateLeaseStatusServices(leaseId, "cancelled", validatedData);
+
+    if (!updatedLease) {
+      throw new NotFoundError("Lease");
+    }
+
+    const response = createSuccessResponse(
+      updatedLease,
+      "Lease cancelled successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route PATCH /leases/:id/status
+ * @description Directly update lease status (e.g., to 'ended')
+ * @access Private (Admin/Organization Owner/Property Manager)
+ */
+export const updateLeaseStatus = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+    const { status } = req.body;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
+    }
+
+    if (!status) {
+      throw new ValidationError("Status is required");
+    }
+
+    // Validate status is a valid lease status
+    const validStatuses = ["draft", "active", "pendingMoveIn", "ended", "terminated", "cancelled"];
+    if (!validStatuses.includes(status)) {
+      throw new ValidationError("Invalid lease status");
+    }
+
+    // Validate request body
+    const validatedData = LeaseStatusChangeSchema.parse(req.body);
+
+    const updatedLease = await updateLeaseStatusServices(leaseId, status as any, validatedData);
+
+    if (!updatedLease) {
+      throw new NotFoundError("Lease");
+    }
+
+    const response = createSuccessResponse(
+      updatedLease,
+      `Lease status updated to ${status} successfully`
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route GET /leases/tenant/:userId
+ * @description Get leases for a specific tenant
+ * @access Private
+ */
+export const getLeasesByTenant = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const userId = req.params.userId;
+
+    if (!userId) {
+      throw new ValidationError("User ID is required");
+    }
+
+    const leases = await getLeasesByTenantServices(userId);
+
+    const response = createLeasesResponse(
+      leases,
+      undefined,
+      "Tenant leases retrieved successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route GET /leases/property/:propertyId
+ * @description Get leases for a property
+ * @access Private
+ */
+export const getLeasesByProperty = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const propertyId = req.params.propertyId;
+
+    if (!propertyId) {
+      throw new ValidationError("Property ID is required");
+    }
+
+    const leases = await getLeasesByPropertyServices(propertyId);
+
+    const response = createLeasesResponse(
+      leases,
+      undefined,
+      "Property leases retrieved successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * @route GET /leases/:id/balance
+ * @description Calculate the real-time outstanding balance for the lease
+ * @access Private
+ */
+export const getLeaseBalance = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const leaseId = req.params.id;
+
+    if (!leaseId) {
+      throw new ValidationError("Lease ID is required");
+    }
+
+    const balance = await getLeaseBalanceServices(leaseId);
+
+    const response = createSuccessResponse(
+      balance,
+      "Lease balance calculated successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
