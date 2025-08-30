@@ -5,10 +5,10 @@ import { propertyRouter } from "./property/property.route";
 import { unitRouter } from "./unit/unit.route";
 import { paymentRouter } from "./payment/payment.route";
 import { unitAmenityRouter } from "./unitAmenity/unitAmenity.route";
-import { amenityRouter } from "./amenity/amenity.route";
 import { userRouter } from "./user/user.route";
 import organizationRouter from "./organization/organization.route";
 import leaseRouter from "./lease/lease.route";
+import amenitiesRouter from "./amenity/amenity.route";
 
 dotenv.config();
 
@@ -42,7 +42,7 @@ app.use('/api', unitRouter)
 app.use('/api', paymentRouter)
 app.use('/api', leaseRouter)
 app.use('/api', unitAmenityRouter)
-app.use('/api', amenityRouter)
+app.use('/api', amenitiesRouter)
 app.use('/api', userRouter)
 app.use('/api', organizationRouter)
 

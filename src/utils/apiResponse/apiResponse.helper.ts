@@ -14,7 +14,8 @@ import {
   PaginatedResponse,
   ActivityLogResponse,
   OrganizationResponse,
-  UserOrganizationResponse
+  UserOrganizationResponse,
+  AmenityResponse
 } from './apiResponse.types';
 
 interface ResponseParams<T> {
@@ -274,4 +275,23 @@ export function createLeasesResponse(
     return createPaginatedResponse(leases, pagination, message);
   }
   return createSuccessResponse(leases, message);
+}
+
+
+export function createAmenityResponse(
+  amenity: AmenityResponse,
+  message: string = 'Amenity retrieved successfully.'
+): ApiResponse<AmenityResponse> {
+  return createSuccessResponse(amenity, message);
+}
+
+export function createAmenitiesResponse(
+  amenities: AmenityResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'Amenities retrieved successfully.'
+): ApiResponse<AmenityResponse[]> {
+  if (pagination) {
+    return createPaginatedResponse(amenities, pagination, message);
+  }
+  return createSuccessResponse(amenities, message);
 }

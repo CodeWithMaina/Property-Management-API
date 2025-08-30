@@ -166,3 +166,33 @@ export interface UnitResponse extends Unit {
   maintenanceRequests?: MaintenanceRequest[];
   unitAmenities?: UnitAmenity[];
 }
+
+export interface AmenityResponse {
+  id: string;
+  organizationId: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  organization?: {
+    id: string;
+    name: string;
+    legalName?: string;
+  };
+  unitAmenities?: Array<{
+    unit: {
+      id: string;
+      code: string;
+      propertyId: string;
+      property?: {
+        id: string;
+        name: string;
+      };
+    };
+  }>;
+}
+
+// Add to the existing interface if it exists
+// export interface ApiResponseTypes {
+//   // ... existing types
+//   AmenityResponse: AmenityResponse;
+// }

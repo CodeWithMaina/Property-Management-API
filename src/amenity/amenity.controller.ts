@@ -1,136 +1,228 @@
+// amenities.controller.ts
 import { Request, Response } from "express";
 import {
-  getAmenitiesService,
-  getAmenityByIdService,
-  createAmenityService,
-  updateAmenityService,
-  deleteAmenityService,
+  asyncHandler,
+  NotFoundError,
+  ValidationError,
+  ConflictError,
+} from "../utils/errorHandler";
+import {
+  createPaginatedResponse,
+  createSuccessResponse,
+  createAmenityResponse,
+  createAmenitiesResponse,
+} from "../utils/apiResponse/apiResponse.helper";
+import {
+  AmenitySchema,
+  PartialAmenitySchema,
+  AmenityQuerySchema,
+} from "./amenity.validator";
+import {
+  updateAmenityServices,
+  getAmenitiesServices,
+  getAmenityByIdServices,
+  getAmenitiesByOrganizationServices,
+  createAmenityServices,
+  deleteAmenityServices,
 } from "./amenity.service";
-import { Amenity } from "../drizzle/schema";
-import { amenityUpdateSchema } from "./amenity.schema";
 
-export const getAmenitiesController = async (req: Request, res: Response) => {
-  try {
-    const amenities = await getAmenitiesService();
-    if (amenities == null || amenities.length === 0) {
-      res.status(404).json({ message: "No amenities found" });
-      return;
-    }
-    res.status(200).json(amenities);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch amenities",
-      error: error.message,
-    });
+/**
+ * Get all amenities with optional filtering
+ */
+export const getAmenities = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    // Validate query parameters
+    const queryParams = AmenityQuerySchema.parse(req.query);
+
+    const result = await getAmenitiesServices(queryParams);
+
+    // Create pagination object
+    const pagination = {
+      total: result.total,
+      count: result.amenities.length,
+      perPage: queryParams.limit,
+      currentPage: queryParams.page,
+      totalPages: Math.ceil(result.total / queryParams.limit),
+      links: {
+        first: null,
+        last: null,
+        prev: null,
+        next: null,
+      },
+    };
+
+    const response = createPaginatedResponse(
+      result.amenities,
+      pagination,
+      "Amenities retrieved successfully"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
 
-export const getAmenityByIdController = async (req: Request, res: Response) => {
-  try {
-    const amenityId = req.params.id;
-    if (!amenityId) {
-      res.status(400).json({ message: "Invalid amenity ID" });
-      return;
+/**
+ * Get amenities for a specific organization
+ */
+export const getAmenitiesByOrganization = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const organizationId = req.params.orgId;
+
+    if (!organizationId) {
+      throw new ValidationError("Organization ID is required");
     }
 
-    const amenity = await getAmenityByIdService(amenityId);
+    const amenities = await getAmenitiesByOrganizationServices(organizationId);
+
+    const response = createAmenitiesResponse(
+      amenities,
+      undefined,
+      "Organization amenities retrieved successfully"
+    );
+
+    res.status(200).json(response);
+  }
+);
+
+/**
+ * Get specific amenity details
+ */
+export const getAmenityById = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    const amenityId = req.params.id;
+
+    if (!amenityId) {
+      throw new ValidationError("Amenity ID is required");
+    }
+
+    const amenity = await getAmenityByIdServices(amenityId);
+
     if (!amenity) {
-      res.status(404).json({ message: "Amenity not found" });
-      return;
+      throw new NotFoundError("Amenity");
     }
-    res.status(200).json(amenity);
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to fetch amenity",
-      error: error.message,
-    });
+
+    const response = createAmenityResponse(
+      amenity,
+      "Amenity retrieved successfully"
+    );
+
+    res.status(200).json(response);
   }
-};
+);
 
-export const createAmenityController = async (req: Request, res: Response) => {
-  try {
-    const amenityData: Amenity = req.body;
-    if (!amenityData.name) {
-      res.status(400).json({ message: "Missing required fields" });
-      return;
-    }
+/**
+ * Create a new amenity
+ */
+export const createAmenity = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
+    // Validate request body
+    const validatedData = AmenitySchema.parse(req.body);
 
-    const newAmenity = await createAmenityService(amenityData);
-    res.status(201).json(newAmenity);
-  } catch (error: any) {
-    if (error.code === '23505') {
-      res.status(409).json({
-        message: "Amenity name already exists",
-        error: "name_taken",
-      });
-      return;
+    try {
+      const newAmenity = await createAmenityServices(validatedData);
+
+      const response = createSuccessResponse(
+        newAmenity,
+        "Amenity created successfully"
+      );
+
+      res.status(201).json(response);
+    } catch (error: any) {
+      if (error.message === "Organization not found") {
+        throw new NotFoundError(error.message);
+      }
+
+      if (
+        error.message ===
+        "Amenity with this name already exists in this organization"
+      ) {
+        throw new ConflictError(error.message);
+      }
+
+      throw error;
     }
-    res.status(500).json({
-      message: "Failed to create amenity",
-      error: error.message,
-    });
   }
-};
+);
 
-export const updateAmenityController = async (req: Request, res: Response) => {
-  try {
+/**
+ * Update amenity information
+ */
+export const updateAmenity = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const amenityId = req.params.id;
+
     if (!amenityId) {
-      res.status(400).json({ message: "Invalid amenity ID" });
-      return;
+      throw new ValidationError("Amenity ID is required");
     }
 
-    const parsed = amenityUpdateSchema.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({
-        message: "Validation failed",
-        errors: parsed.error.flatten().fieldErrors,
-      });
-      return;
-    }
+    // Validate request body
+    const validatedData = PartialAmenitySchema.parse(req.body);
 
-    const filteredData = parsed.data;
-    const updatedAmenity = await updateAmenityService(amenityId, filteredData);
-    
-    if (!updatedAmenity) {
-      res.status(404).json({ message: "Amenity not found" });
-      return;
-    }
+    try {
+      const updatedAmenity = await updateAmenityServices(
+        amenityId,
+        validatedData
+      );
 
-    res.status(200).json(updatedAmenity);
-  } catch (error: any) {
-    if (error.code === '23505') {
-      res.status(409).json({
-        message: "Amenity name already exists",
-        error: "name_taken",
-      });
-      return;
+      const response = createSuccessResponse(
+        updatedAmenity,
+        "Amenity updated successfully"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (
+        error.message === "Amenity not found" ||
+        error.message === "Organization not found"
+      ) {
+        throw new NotFoundError(error.message);
+      }
+
+      if (
+        error.message ===
+        "Amenity with this name already exists in this organization"
+      ) {
+        throw new ConflictError(error.message);
+      }
+
+      throw error;
     }
-    res.status(500).json({
-      message: "Failed to update amenity",
-      error: error.message,
-    });
   }
-};
+);
 
-export const deleteAmenityController = async (req: Request, res: Response) => {
-  try {
+/**
+ * Delete an amenity
+ */
+export const deleteAmenity = asyncHandler(
+  async (req: Request, res: Response): Promise<void> => {
     const amenityId = req.params.id;
+
     if (!amenityId) {
-      res.status(400).json({ message: "Invalid amenity ID" });
-      return;
+      throw new ValidationError("Amenity ID is required");
     }
 
-    const deletedAmenity = await deleteAmenityService(amenityId);
-    if (!deletedAmenity) {
-      res.status(404).json({ message: "Amenity not found" });
-      return;
+    try {
+      const deletedAmenity = await deleteAmenityServices(amenityId);
+
+      const response = createSuccessResponse(
+        deletedAmenity,
+        "Amenity deleted successfully"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error.message === "Amenity not found") {
+        throw new NotFoundError(error.message);
+      }
+
+      if (
+        error.message ===
+        "Cannot delete amenity: it is currently assigned to units"
+      ) {
+        throw new ConflictError(error.message);
+      }
+
+      throw error;
     }
-    res.status(200).json({ message: "Amenity deleted successfully" });
-  } catch (error: any) {
-    res.status(500).json({
-      message: "Failed to delete amenity",
-      error: error.message,
-    });
   }
-};
+);
