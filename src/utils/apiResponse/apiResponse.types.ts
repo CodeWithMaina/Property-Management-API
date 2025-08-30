@@ -1,6 +1,7 @@
+import { unitAmenities, UnitAmenity } from './../../drizzle/schema';
 // types/api-response.ts
 
-import { ActivityLog } from "../../drizzle/schema";
+import { ActivityLog, UnitStatusEnum } from "../../drizzle/schema";
 import { Amenity, Invoice, InvoiceItem, Lease, MaintenanceAttachment, MaintenanceComment, MaintenanceRequest, Organization, Payment, PaymentAllocation, Property, PropertyManager, Receipt, Unit, User, UserOrganization } from "../../drizzle/schema";
 
 /**
@@ -99,12 +100,7 @@ export interface PropertyResponse extends Property {
   leases?: Lease[];
 }
 
-export interface UnitResponse extends Unit {
-  property?: Property;
-  amenities?: Amenity[];
-  leases?: Lease[];
-  maintenanceRequests?: MaintenanceRequest[];
-}
+
 
 export interface LeaseResponse extends Lease {
   organization?: Organization;
@@ -146,8 +142,27 @@ export interface ActivityLogResponse extends ActivityLog {
   actor?: User;
 }
 
+// Organization and User Organization specific response types
+export interface OrganizationResponse extends Organization {
+  userOrganizations?: UserOrganizationResponse[];
+  properties?: PropertyResponse[];
+}
+
+export interface UserOrganizationResponse extends UserOrganization {
+  user?: UserResponse;
+  organization?: OrganizationResponse;
+}
+
 // Paginated response types
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: MetaData['pagination'];
+}
+
+export interface UnitResponse extends Unit {
+  property?: Property;
+  amenities?: Amenity[];
+  leases?: Lease[];
+  maintenanceRequests?: MaintenanceRequest[];
+  unitAmenities?: UnitAmenity[];
 }

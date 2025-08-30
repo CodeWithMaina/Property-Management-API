@@ -8,6 +8,7 @@ import { leaseRouter } from "./lease/lease.route";
 import { unitAmenityRouter } from "./unitAmenity/unitAmenity.route";
 import { amenityRouter } from "./amenity/amenity.route";
 import { userRouter } from "./user/user.route";
+import organizationRouter from "./organization/organization.route";
 
 dotenv.config();
 
@@ -43,6 +44,7 @@ app.use('/api', leaseRouter)
 app.use('/api', unitAmenityRouter)
 app.use('/api', amenityRouter)
 app.use('/api', userRouter)
+app.use('/api', organizationRouter)
 
 // 🚀 Start Server
 app.listen(PORT, () => {

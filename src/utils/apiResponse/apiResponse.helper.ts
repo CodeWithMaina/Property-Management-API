@@ -12,7 +12,9 @@ import {
   PaymentResponse,
   MaintenanceRequestResponse,
   PaginatedResponse,
-  ActivityLogResponse
+  ActivityLogResponse,
+  OrganizationResponse,
+  UserOrganizationResponse
 } from './apiResponse.types';
 
 interface ResponseParams<T> {
@@ -234,4 +236,41 @@ export function createActivityLogsResponse(
     return createPaginatedResponse(logs, pagination, message);
   }
   return createSuccessResponse(logs, message);
+}
+
+// Add to existing apiResponse.helper.ts
+export function createOrganizationResponse(
+  organization: OrganizationResponse,
+  message: string = 'Organization retrieved successfully.'
+): ApiResponse<OrganizationResponse> {
+  return createSuccessResponse(organization, message);
+}
+
+export function createOrganizationsResponse(
+  organizations: OrganizationResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'Organizations retrieved successfully.'
+): ApiResponse<OrganizationResponse[]> {
+  if (pagination) {
+    return createPaginatedResponse(organizations, pagination, message);
+  }
+  return createSuccessResponse(organizations, message);
+}
+
+export function createUserOrganizationResponse(
+  userOrganization: UserOrganizationResponse,
+  message: string = 'User organization retrieved successfully.'
+): ApiResponse<UserOrganizationResponse> {
+  return createSuccessResponse(userOrganization, message);
+}
+
+export function createUserOrganizationsResponse(
+  userOrganizations: UserOrganizationResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'User organizations retrieved successfully.'
+): ApiResponse<UserOrganizationResponse[]> {
+  if (pagination) {
+    return createPaginatedResponse(userOrganizations, pagination, message);
+  }
+  return createSuccessResponse(userOrganizations, message);
 }
