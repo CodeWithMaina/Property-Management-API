@@ -3,12 +3,11 @@ import dotenv from "dotenv";
 import cors from "cors";
 import { propertyRouter } from "./property/property.route";
 import { unitRouter } from "./unit/unit.route";
-import { paymentRouter } from "./payment/payment.route";
-import { unitAmenityRouter } from "./unitAmenity/unitAmenity.route";
 import { userRouter } from "./user/user.route";
 import organizationRouter from "./organization/organization.route";
 import leaseRouter from "./lease/lease.route";
 import amenitiesRouter from "./amenity/amenity.route";
+import invoiceRoutes from "./invoice/invoice.route";
 
 dotenv.config();
 
@@ -39,12 +38,12 @@ app.use(express.urlencoded({ extended: true }));
 // 📦 API Routes
 app.use('/api', propertyRouter)
 app.use('/api', unitRouter)
-app.use('/api', paymentRouter)
 app.use('/api', leaseRouter)
-app.use('/api', unitAmenityRouter)
 app.use('/api', amenitiesRouter)
 app.use('/api', userRouter)
 app.use('/api', organizationRouter)
+app.use('/api', invoiceRoutes)
+
 
 // 🚀 Start Server
 app.listen(PORT, () => {

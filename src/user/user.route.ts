@@ -1,3 +1,4 @@
+// user.route.ts
 import { Router } from "express";
 import {
   getUsers,
@@ -7,11 +8,23 @@ import {
   deleteUser,
   deactivateUser,
   activateUser,
+  getUserOrganizations,
+  searchUsers,
+  inviteUser,
+  acceptInvite,
 } from "./user.controller";
 import { validate } from "../middleware/validate";
-import { CreateUserSchema, UpdateUserSchema, UserFiltersSchema } from "./user.validator";
+import {
+  CreateUserSchema,
+  UpdateUserSchema,
+  UserFiltersSchema,
+  SearchUsersSchema,
+  InviteUserSchema,
+  AcceptInviteSchema,
+} from "./user.validator";
 
 export const userRouter = Router();
+
 
 // Get all users (with optional filtering)
 userRouter.get(
@@ -58,78 +71,31 @@ userRouter.patch(
   activateUser
 );
 
+// Get user organizations
+userRouter.get(
+  "/users/:id/organizations",
+  getUserOrganizations
+);
+
+// Search users
+userRouter.get(
+  "/users/search",
+  validate(SearchUsersSchema, "query"),
+  searchUsers
+);
+
+// Invite user
+userRouter.post(
+  "/users/invite",
+  validate(InviteUserSchema),
+  inviteUser
+);
+
+// Accept invite (public route - no authentication required)
+userRouter.post(
+  "/invites/:token/accept",
+  validate(AcceptInviteSchema),
+  acceptInvite
+);
+
 export default userRouter;
-
-// import { Router } from "express";
-// import {
-//   getUsers,
-//   getUserById,
-//   createUser,
-//   updateUser,
-//   deleteUser,
-//   deactivateUser,
-//   activateUser,
-// } from "./user.controller";
-// import { validate } from "../middleware/validate";
-// import { CreateUserSchema, UpdateUserSchema, UserFiltersSchema } from "./user.validator";
-// import { authenticate } from "../middleware/authorization/authenticate";
-// import authorize from "../middleware/authorization/authorize";
-
-// export const userRouter = Router();
-
-// // Apply authentication to all routes
-// userRouter.use(authenticate);
-
-// // Get all users (with optional filtering)
-// userRouter.get(
-//   "/users",
-//   authorize(["admin", "superAdmin", "propertyOwner", "manager"]),
-//   validate(UserFiltersSchema, "query"),
-//   getUsers
-// );
-
-// // Get user by ID
-// userRouter.get(
-//   "/users/:id",
-//   authorize(["admin", "superAdmin", "propertyOwner", "manager"]),
-//   getUserById
-// );
-
-// // Create a new user
-// userRouter.post(
-//   "/users",
-//   authorize(["admin", "superAdmin"]),
-//   validate(CreateUserSchema),
-//   createUser
-// );
-
-// // Update an existing user
-// userRouter.put(
-//   "/users/:id",
-//   authorize(["admin", "superAdmin"]),
-//   validate(UpdateUserSchema),
-//   updateUser
-// );
-
-// // Delete a user
-// userRouter.delete(
-//   "/users/:id",
-//   authorize(["admin", "superAdmin"]),
-//   deleteUser
-// );
-
-// // Deactivate a user
-// userRouter.patch(
-//   "/users/:id/deactivate",
-//   authorize(["admin", "superAdmin", "propertyOwner", "manager"]),
-//   deactivateUser
-// );
-
-// // Activate a user
-// userRouter.patch(
-//   "/users/:id/activate",
-//   authorize(["admin", "superAdmin", "propertyOwner", "manager"]),
-//   activateUser
-// );
-
-// export default userRouter;
