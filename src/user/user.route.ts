@@ -25,6 +25,12 @@ import {
 
 export const userRouter = Router();
 
+// Search users
+userRouter.get(
+  "/users/search",
+  validate(SearchUsersSchema, "query"),
+  searchUsers
+);
 
 // Get all users (with optional filtering)
 userRouter.get(
@@ -77,12 +83,6 @@ userRouter.get(
   getUserOrganizations
 );
 
-// Search users
-userRouter.get(
-  "/users/search",
-  validate(SearchUsersSchema, "query"),
-  searchUsers
-);
 
 // Invite user
 userRouter.post(

@@ -411,7 +411,12 @@ export const searchUsersService = async (
   searchParams: SearchUsersInput
 ): Promise<UserResponse[]> => {
   try {
-    const { email, phone } = searchParams;
+    let { email, phone } = searchParams;
+
+    // Decode URL encoded characters in phone
+    if (phone) {
+      phone = decodeURIComponent(phone);
+    }
 
     if (!email && !phone) {
       throw new ValidationError("Email or phone is required for search");
