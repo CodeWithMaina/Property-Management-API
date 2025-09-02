@@ -122,9 +122,9 @@ export const getInvoiceById = asyncHandler(
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
 
-    const invoice = await getInvoiceByIdService(invoiceId);
+    const invoice = await getInvoiceByIdService(invoiceId, organizationId);
 
-    if (!invoice || invoice.organizationId !== organizationId) {
+    if (!invoice) {
       throw new NotFoundError("Invoice");
     }
 
@@ -306,6 +306,7 @@ export const updateInvoiceItem = asyncHandler(
     const organizationId = (req as any).user.organizationId;
 
     const updatedItem = await updateInvoiceItemService(
+      invoiceId,
       itemId,
       validatedData,
       organizationId
@@ -340,7 +341,11 @@ export const removeInvoiceItem = asyncHandler(
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
 
-    const removedItem = await removeInvoiceItemService(itemId, organizationId);
+    const removedItem = await removeInvoiceItemService(
+      invoiceId,
+      itemId,
+      organizationId
+    );
 
     if (!removedItem) {
       throw new NotFoundError("Invoice item");
@@ -413,7 +418,7 @@ export const generateLeaseInvoice = asyncHandler(
 );
 
 /**
- * @route POST /invoices/:id/issue
+ * @route PATCH /invoices/:id/issue
  * @description Transition an invoice from 'draft' to 'issued'
  * @access Private (Admin/Organization Owner/Property Manager)
  */
@@ -449,7 +454,7 @@ export const issueInvoice = asyncHandler(
 );
 
 /**
- * @route POST /invoices/:id/send-reminder
+ * @route POST /invoices/:id/reminders
  * @description Send a payment reminder for an invoice
  * @access Private (Admin/Organization Owner/Property Manager)
  */
@@ -467,7 +472,11 @@ export const sendInvoiceReminder = asyncHandler(
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
 
-    const result = await sendInvoiceReminderService(invoiceId, organizationId);
+    const result = await sendInvoiceReminderService(
+      invoiceId,
+      validatedData,
+      organizationId
+    );
 
     const response = createSuccessResponse(
       result,

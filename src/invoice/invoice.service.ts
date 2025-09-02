@@ -7,15 +7,20 @@ import {
   InvoiceItemInput,
   InvoiceQueryParams,
   BatchGenerateInvoicesInput,
-  VoidInvoiceInput
+  VoidInvoiceInput,
+  InvoiceReminderInput
 } from "./invoice.validator";
 import { ValidationError, NotFoundError, ConflictError } from "../utils/errorHandler";
 import db from "../drizzle/db";
-import { Invoice, invoices, 
+import { 
+  invoices, 
   invoiceItems, 
   leases,
   InvoiceStatusEnum,
-  paymentAllocations } from "../drizzle/schema";
+  paymentAllocations,
+  payments 
+} from "../drizzle/schema";
+import type { Invoice } from "../drizzle/schema";
 
 /**
  * Get all invoices with optional filtering and pagination
@@ -134,10 +139,14 @@ export const getInvoicesService = async (
  * Get invoice by ID with detailed information
  */
 export const getInvoiceByIdService = async (
-  invoiceId: string
+  invoiceId: string,
+  organizationId: string
 ): Promise<Invoice | undefined> => {
   return await db.query.invoices.findFirst({
-    where: eq(invoices.id, invoiceId),
+    where: and(
+      eq(invoices.id, invoiceId),
+      eq(invoices.organizationId, organizationId)
+    ),
     with: {
       lease: {
         columns: {
@@ -231,16 +240,15 @@ export const createInvoiceService = async (
 ): Promise<Invoice> => {
   // Check if lease exists and belongs to the organization
   const lease = await db.query.leases.findFirst({
-    where: eq(leases.id, invoiceData.leaseId),
+    where: and(
+      eq(leases.id, invoiceData.leaseId),
+      eq(leases.organizationId, organizationId)
+    ),
     columns: { id: true, organizationId: true }
   });
 
   if (!lease) {
     throw new NotFoundError("Lease");
-  }
-
-  if (lease.organizationId !== organizationId) {
-    throw new ValidationError("Lease does not belong to your organization");
   }
 
   // Check if invoice number is unique within the organization
@@ -427,13 +435,17 @@ export const voidInvoiceService = async (
   }
 
   // Check if there are payments allocated to this invoice
-  if (parseFloat(invoice.balanceAmount) > 0) {
-    const allocations = await db.query.paymentAllocations.findMany({
-      where: eq(paymentAllocations.invoiceId, invoiceId),
-      columns: { id: true }
-    });
+  const allocations = await db.query.paymentAllocations.findMany({
+    where: eq(paymentAllocations.invoiceId, invoiceId),
+    columns: { id: true, amountApplied: true }
+  });
 
-    if (allocations.length > 0) {
+  if (allocations.length > 0) {
+    // Check if any payment has been applied
+    const totalApplied = allocations.reduce((sum, alloc) => 
+      sum + parseFloat(alloc.amountApplied), 0);
+    
+    if (totalApplied > 0) {
       throw new ValidationError("Cannot void invoice with payments allocated");
     }
   }
@@ -468,7 +480,14 @@ export const addInvoiceItemService = async (
       eq(invoices.id, invoiceId),
       eq(invoices.organizationId, organizationId)
     ),
-    columns: { id: true, status: true, subtotalAmount: true, taxAmount: true, totalAmount: true, balanceAmount: true }
+    columns: { 
+      id: true, 
+      status: true, 
+      subtotalAmount: true, 
+      taxAmount: true, 
+      totalAmount: true, 
+      balanceAmount: true 
+    }
   });
 
   if (!invoice) {
@@ -488,7 +507,7 @@ export const addInvoiceItemService = async (
     .values({
       invoiceId,
       description: itemData.description,
-      quantity: lineTotal.toString(),
+      quantity: itemData.quantity.toString(),
       unitPrice: itemData.unitPrice.toString(),
       lineTotal: lineTotal.toString(),
       metadata: itemData.metadata || {},
@@ -516,16 +535,25 @@ export const addInvoiceItemService = async (
  * Update invoice item
  */
 export const updateInvoiceItemService = async (
+  invoiceId: string,
   itemId: string,
   itemData: Partial<InvoiceItemInput>,
   organizationId: string
 ): Promise<any> => {
-  // Check if item exists and belongs to the organization
+  // Check if item exists and belongs to the organization through the invoice
   const item = await db.query.invoiceItems.findFirst({
     where: eq(invoiceItems.id, itemId),
     with: {
       invoice: {
-        columns: { id: true, organizationId: true, status: true, subtotalAmount: true, taxAmount: true, totalAmount: true, balanceAmount: true }
+        columns: { 
+          id: true, 
+          organizationId: true, 
+          status: true, 
+          subtotalAmount: true, 
+          taxAmount: true, 
+          totalAmount: true, 
+          balanceAmount: true 
+        }
       }
     }
   });
@@ -538,15 +566,17 @@ export const updateInvoiceItemService = async (
     throw new ValidationError("Invoice item does not belong to your organization");
   }
 
+  if (item.invoice.id !== invoiceId) {
+    throw new ValidationError("Invoice item does not belong to the specified invoice");
+  }
+
   // Cannot update items in non-draft invoices
   if (item.invoice.status !== "draft") {
     throw new ValidationError("Can only update items in draft invoices");
   }
 
   // Prepare update data
-  const updateData: any = {
-    updatedAt: new Date(),
-  };
+  const updateData: any = {};
 
   if (itemData.description !== undefined) updateData.description = itemData.description;
   if (itemData.quantity !== undefined) updateData.quantity = itemData.quantity.toString();
@@ -568,7 +598,7 @@ export const updateInvoiceItemService = async (
 
   // Recalculate invoice totals
   const items = await db.query.invoiceItems.findMany({
-    where: eq(invoiceItems.invoiceId, item.invoice.id),
+    where: eq(invoiceItems.invoiceId, invoiceId),
     columns: { lineTotal: true }
   });
 
@@ -583,7 +613,7 @@ export const updateInvoiceItemService = async (
       balanceAmount: newBalance.toString(),
       updatedAt: new Date(),
     })
-    .where(eq(invoices.id, item.invoice.id));
+    .where(eq(invoices.id, invoiceId));
 
   return result[0];
 };
@@ -592,15 +622,24 @@ export const updateInvoiceItemService = async (
  * Remove invoice item
  */
 export const removeInvoiceItemService = async (
+  invoiceId: string,
   itemId: string,
   organizationId: string
 ): Promise<any> => {
-  // Check if item exists and belongs to the organization
+  // Check if item exists and belongs to the organization through the invoice
   const item = await db.query.invoiceItems.findFirst({
     where: eq(invoiceItems.id, itemId),
     with: {
       invoice: {
-        columns: { id: true, organizationId: true, status: true, subtotalAmount: true, taxAmount: true, totalAmount: true, balanceAmount: true }
+        columns: { 
+          id: true, 
+          organizationId: true, 
+          status: true, 
+          subtotalAmount: true, 
+          taxAmount: true, 
+          totalAmount: true, 
+          balanceAmount: true 
+        }
       }
     }
   });
@@ -611,6 +650,10 @@ export const removeInvoiceItemService = async (
 
   if (item.invoice.organizationId !== organizationId) {
     throw new ValidationError("Invoice item does not belong to your organization");
+  }
+
+  if (item.invoice.id !== invoiceId) {
+    throw new ValidationError("Invoice item does not belong to the specified invoice");
   }
 
   // Cannot remove items from non-draft invoices
@@ -624,7 +667,7 @@ export const removeInvoiceItemService = async (
 
   // Recalculate invoice totals
   const items = await db.query.invoiceItems.findMany({
-    where: eq(invoiceItems.invoiceId, item.invoice.id),
+    where: eq(invoiceItems.invoiceId, invoiceId),
     columns: { lineTotal: true }
   });
 
@@ -639,13 +682,13 @@ export const removeInvoiceItemService = async (
       balanceAmount: newBalance.toString(),
       updatedAt: new Date(),
     })
-    .where(eq(invoices.id, item.invoice.id));
+    .where(eq(invoices.id, invoiceId));
 
   return result[0];
 };
 
 /**
- * Generate monthly invoices for all active leases
+ * Batch generate monthly invoices for all active leases
  */
 export const batchGenerateInvoicesService = async (
   batchData: BatchGenerateInvoicesInput,
@@ -659,32 +702,29 @@ export const batchGenerateInvoicesService = async (
       eq(leases.organizationId, organizationId),
       eq(leases.status, "active")
     ),
-    with: {
-      unit: {
-        columns: { code: true }
-      },
-      property: {
-        columns: { name: true }
-      }
+    columns: {
+      id: true,
+      tenantUserId: true,
+      propertyId: true,
+      unitId: true,
+      rentAmount: true,
+      dueDayOfMonth: true,
     }
   });
 
   let generated = 0;
   let skipped = 0;
 
-  // Generate invoice for each lease
+  // Generate invoices for each active lease
   for (const lease of activeLeases) {
     try {
-      // Check if invoice already exists for this period
-      const startOfMonth = new Date(year, month - 1, 1);
-      const endOfMonth = new Date(year, month, 0);
-      
+      // Check if invoice already exists for this month
       const existingInvoice = await db.query.invoices.findFirst({
         where: and(
           eq(invoices.leaseId, lease.id),
           eq(invoices.organizationId, organizationId),
-          gte(invoices.issueDate, startOfMonth),
-          lte(invoices.issueDate, endOfMonth)
+          sql`EXTRACT(MONTH FROM issue_date) = ${month}`,
+          sql`EXTRACT(YEAR FROM issue_date) = ${year}`
         )
       });
 
@@ -694,30 +734,46 @@ export const batchGenerateInvoicesService = async (
       }
 
       // Generate invoice number
-      const invoiceNumber = `INV-${year}${month.toString().padStart(2, '0')}-${lease.id.slice(0, 8).toUpperCase()}`;
+      const invoiceNumber = `INV-${year}${month.toString().padStart(2, '0')}-${lease.id.slice(-6)}`;
 
       // Calculate due date
-      const dueDate = new Date(year, month - 1, dueDay);
-      if (dueDate < new Date()) {
-        dueDate.setMonth(dueDate.getMonth() + 1);
-      }
+      const dueDayValue = dueDay || lease.dueDayOfMonth;
+      const issueDate = new Date(year, month - 1, 1);
+      const dueDate = new Date(year, month - 1, dueDayValue);
 
       // Create invoice
-      await db.insert(invoices)
-        .values({
-          organizationId,
-          leaseId: lease.id,
-          invoiceNumber,
-          status: "issued",
-          issueDate: new Date(),
-          dueDate,
-          currency: lease.billingCurrency,
-          subtotalAmount: lease.rentAmount.toString(),
-          taxAmount: "0",
-          totalAmount: lease.rentAmount.toString(),
-          balanceAmount: lease.rentAmount.toString(),
-          notes: `Rent for ${new Date(year, month - 1).toLocaleString('default', { month: 'long', year: 'numeric' })} - ${lease.property.name} - Unit ${lease.unit.code}`,
-        });
+      const invoiceResult = await db.insert(invoices).values({
+        organizationId,
+        leaseId: lease.id,
+        invoiceNumber,
+        status: "issued",
+        issueDate,
+        dueDate,
+        currency: "KES",
+        subtotalAmount: lease.rentAmount.toString(),
+        taxAmount: "0",
+        totalAmount: lease.rentAmount.toString(),
+        balanceAmount: lease.rentAmount.toString(),
+        metadata: {
+          batchGenerated: true,
+          generationMonth: month,
+          generationYear: year,
+        }
+      }).returning();
+
+      const invoice = invoiceResult[0];
+
+      // Add rent line item
+      await db.insert(invoiceItems).values({
+        invoiceId: invoice.id,
+        description: `Rent for ${month}/${year}`,
+        quantity: "1",
+        unitPrice: lease.rentAmount.toString(),
+        lineTotal: lease.rentAmount.toString(),
+        metadata: {
+          isRent: true,
+        }
+      });
 
       generated++;
     } catch (error) {
@@ -742,13 +798,13 @@ export const generateLeaseInvoiceService = async (
       eq(leases.id, leaseId),
       eq(leases.organizationId, organizationId)
     ),
-    with: {
-      unit: {
-        columns: { code: true }
-      },
-      property: {
-        columns: { name: true }
-      }
+    columns: {
+      id: true,
+      tenantUserId: true,
+      propertyId: true,
+      unitId: true,
+      rentAmount: true,
+      dueDayOfMonth: true,
     }
   });
 
@@ -756,35 +812,15 @@ export const generateLeaseInvoiceService = async (
     throw new NotFoundError("Lease");
   }
 
-  // Check if invoice already exists for this month
-  const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-  const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  
-  const existingInvoice = await db.query.invoices.findFirst({
-    where: and(
-      eq(invoices.leaseId, leaseId),
-      eq(invoices.organizationId, organizationId),
-      gte(invoices.issueDate, startOfMonth),
-      lte(invoices.issueDate, endOfMonth)
-    )
-  });
-
-  if (existingInvoice) {
-    throw new ConflictError("Invoice already exists for this month");
-  }
-
   // Generate invoice number
-  const invoiceNumber = `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${lease.id.slice(0, 8).toUpperCase()}`;
+  const now = new Date();
+  const invoiceNumber = `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}-${leaseId.slice(-6)}`;
 
-  // Calculate due date (use lease's due day)
-  const dueDate = new Date(now.getFullYear(), now.getMonth(), lease.dueDayOfMonth);
-  if (dueDate < now) {
-    dueDate.setMonth(dueDate.getMonth() + 1);
-  }
+  // Calculate due date (default to 15th of next month)
+  const dueDate = new Date(now.getFullYear(), now.getMonth() + 1, lease.dueDayOfMonth || 15);
 
   // Create invoice
-  const result = await db.insert(invoices)
+  const invoiceResult = await db.insert(invoices)
     .values({
       organizationId,
       leaseId,
@@ -792,16 +828,102 @@ export const generateLeaseInvoiceService = async (
       status: "issued",
       issueDate: now,
       dueDate,
-      currency: lease.billingCurrency,
+      currency: "KES",
       subtotalAmount: lease.rentAmount.toString(),
       taxAmount: "0",
       totalAmount: lease.rentAmount.toString(),
       balanceAmount: lease.rentAmount.toString(),
-      notes: `Rent for ${now.toLocaleString('default', { month: 'long', year: 'numeric' })} - ${lease.property.name} - Unit ${lease.unit.code}`,
+      metadata: {
+        manuallyGenerated: true,
+      }
     })
     .returning();
 
-  return result[0];
+  // Add rent line item
+  await db.insert(invoiceItems)
+    .values({
+      invoiceId: invoiceResult[0].id,
+      description: `Rent for ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`,
+      quantity: "1",
+      unitPrice: lease.rentAmount.toString(),
+      lineTotal: lease.rentAmount.toString(),
+      metadata: {
+        isRent: true,
+      }
+    });
+
+  return invoiceResult[0];
+};
+
+/**
+ * Send invoice reminder
+ */
+export const sendInvoiceReminderService = async (
+  invoiceId: string,
+  reminderData: InvoiceReminderInput,
+  organizationId: string
+): Promise<{ success: boolean; message: string }> => {
+  // Check if invoice exists and belongs to the organization
+  const invoice = await db.query.invoices.findFirst({
+    where: and(
+      eq(invoices.id, invoiceId),
+      eq(invoices.organizationId, organizationId)
+    ),
+    with: {
+      lease: {
+        with: {
+          tenant: {
+            columns: {
+              id: true,
+              email: true,
+              fullName: true,
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!invoice) {
+    throw new NotFoundError("Invoice");
+  }
+
+  // Only send reminders for issued or overdue invoices
+  if (!["issued", "overdue"].includes(invoice.status)) {
+    throw new ValidationError("Can only send reminders for issued or overdue invoices");
+  }
+
+  // TODO: Implement actual email sending logic
+  // For now, just log the reminder
+  console.log(`Invoice reminder sent for invoice ${invoiceId} to ${invoice.lease.tenant.email}`);
+  console.log(`Reminder message: ${reminderData.message || 'Default reminder message'}`);
+
+  // Update invoice metadata with reminder info
+  const currentMetadata = invoice.metadata as Record<string, any> || {};
+  const existingReminders = Array.isArray(currentMetadata.reminders) ? currentMetadata.reminders : [];
+
+  await db.update(invoices)
+    .set({
+      metadata: {
+        ...currentMetadata,
+        reminders: [
+          ...existingReminders,
+          {
+            sentAt: new Date().toISOString(),
+            method: reminderData.method,
+            message: reminderData.message,
+            recipient: invoice.lease.tenant.email,
+          }
+        ]
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(invoices.id, invoiceId));
+
+  return {
+    success: true,
+    message: "Invoice reminder sent successfully"
+  };
 };
 
 /**
@@ -825,7 +947,10 @@ export const getLeaseInvoicesService = async (
   }
 
   return await db.query.invoices.findMany({
-    where: eq(invoices.leaseId, leaseId),
+    where: and(
+      eq(invoices.leaseId, leaseId),
+      eq(invoices.organizationId, organizationId)
+    ),
     with: {
       items: true,
       allocations: {
@@ -835,7 +960,6 @@ export const getLeaseInvoicesService = async (
               id: true,
               amount: true,
               method: true,
-              status: true,
               receivedAt: true,
             }
           }
@@ -844,66 +968,4 @@ export const getLeaseInvoicesService = async (
     },
     orderBy: [desc(invoices.issueDate)],
   });
-};
-
-/**
- * Send payment reminder for an invoice
- */
-export const sendInvoiceReminderService = async (
-  invoiceId: string,
-  organizationId: string
-): Promise<{ success: boolean; message: string }> => {
-  // Check if invoice exists and belongs to the organization
-  const invoice = await db.query.invoices.findFirst({
-    where: and(
-      eq(invoices.id, invoiceId),
-      eq(invoices.organizationId, organizationId)
-    ),
-    with: {
-      lease: {
-        with: {
-          tenant: {
-            columns: {
-              id: true,
-              fullName: true,
-              email: true,
-              phone: true,
-            }
-          }
-        }
-      }
-    }
-  });
-
-  if (!invoice) {
-    throw new NotFoundError("Invoice");
-  }
-
-  // Only send reminders for issued or overdue invoices
-  if (!["issued", "overdue"].includes(invoice.status)) {
-    throw new ValidationError("Can only send reminders for issued or overdue invoices");
-  }
-
-  // In a real implementation, you would integrate with email/SMS service here
-  const tenant = invoice.lease.tenant;
-  const message = `Reminder: Invoice ${invoice.invoiceNumber} for KES ${invoice.totalAmount} is due on ${invoice.dueDate.toLocaleDateString()}.`;
-
-  // Simulate sending reminder
-  console.log(`Sending reminder to ${tenant.email}: ${message}`);
-  
-  // Update invoice metadata with reminder sent
-  await db.update(invoices)
-    .set({
-      metadata: sql`COALESCE(metadata, '{}'::jsonb) || ${JSON.stringify({
-        lastReminderSent: new Date().toISOString(),
-        reminderCount: (invoice.metadata as any)?.reminderCount ? (invoice.metadata as any).reminderCount + 1 : 1
-      })}`,
-      updatedAt: new Date(),
-    })
-    .where(eq(invoices.id, invoiceId));
-
-  return {
-    success: true,
-    message: `Reminder sent to ${tenant.email}`
-  };
 };

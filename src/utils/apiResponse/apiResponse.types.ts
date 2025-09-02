@@ -1,4 +1,4 @@
-import { unitAmenities, UnitAmenity } from './../../drizzle/schema';
+import { MaintenanceStatusEnum, PriorityEnum, unitAmenities, UnitAmenity } from './../../drizzle/schema';
 // types/api-response.ts
 
 import { ActivityLog, UnitStatusEnum } from "../../drizzle/schema";
@@ -127,13 +127,28 @@ export interface PaymentResponse extends Payment {
   receipt?: Receipt;
 }
 
-export interface MaintenanceRequestResponse extends MaintenanceRequest {
-  organization?: Organization;
-  property?: Property;
-  unit?: Unit;
-  createdBy?: User;
-  assignedTo?: User;
-  comments?: MaintenanceComment[];
+export interface MaintenanceRequestResponse {
+  id: string;
+  organizationId: string;
+  propertyId: string;
+  unitId?: string | null;
+  createdByUserId: string;
+  assignedToUserId?: string | null;
+  title: string;
+  description?: string | null;
+  status: MaintenanceStatusEnum;
+  priority: PriorityEnum;
+  scheduledAt?: Date | null;
+  resolvedAt?: Date | null;
+  costAmount?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: Date;
+  updatedAt: Date;
+  property?: PropertyResponse;
+  unit?: UnitResponse | null;
+  createdBy?: UserResponse | null;
+  assignedTo?: UserResponse | null; 
+  comments?: (MaintenanceComment & { author?: UserResponse | null })[];
   attachments?: MaintenanceAttachment[];
 }
 

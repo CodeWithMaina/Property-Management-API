@@ -1,5 +1,6 @@
 // utils/response-helper.ts
 
+import { MaintenanceAttachment, MaintenanceComment } from '../../drizzle/schema';
 import { 
   ApiResponse, 
   MetaData, 
@@ -81,17 +82,33 @@ export function createErrorResponse(
   });
 }
 
+// export function createPaginatedResponse<T>(
+//   data: T[],
+//   paginationInfo: MetaData['pagination'],
+//   message: string = 'Data retrieved successfully.'
+// ): ApiResponse<T[]> {
+//   return createResponse<T[]>({
+//     success: true,
+//     message,
+//     data,
+//     meta: { pagination: paginationInfo },
+//   });
+// }
+
 export function createPaginatedResponse<T>(
   data: T[],
   paginationInfo: MetaData['pagination'],
   message: string = 'Data retrieved successfully.'
 ): ApiResponse<T[]> {
-  return createResponse<T[]>({
+  return {
     success: true,
     message,
     data,
+    errorCode: null,
+    errors: null,
     meta: { pagination: paginationInfo },
-  });
+    timestamp: new Date().toISOString(),
+  };
 }
 
 // Entity-specific success response helpers
@@ -186,23 +203,7 @@ export function createPaymentsResponse(
   return createSuccessResponse(payments, message);
 }
 
-export function createMaintenanceRequestResponse(
-  request: MaintenanceRequestResponse,
-  message: string = 'Maintenance request retrieved successfully.'
-): ApiResponse<MaintenanceRequestResponse> {
-  return createSuccessResponse(request, message);
-}
 
-export function createMaintenanceRequestsResponse(
-  requests: MaintenanceRequestResponse[],
-  pagination?: MetaData['pagination'],
-  message: string = 'Maintenance requests retrieved successfully.'
-): ApiResponse<MaintenanceRequestResponse[]> {
-  if (pagination) {
-    return createPaginatedResponse(requests, pagination, message);
-  }
-  return createSuccessResponse(requests, message);
-}
 
 export function createActivityLogResponse(
   log: ActivityLogResponse,
@@ -295,3 +296,63 @@ export function createAmenitiesResponse(
   }
   return createSuccessResponse(amenities, message);
 }
+
+export const createMaintenanceRequestResponse = (
+  data: MaintenanceRequestResponse,
+  message: string = "Success"
+): ApiResponse<MaintenanceRequestResponse> => {
+  return {
+    success: true,
+    message,
+    data,
+    errorCode: null,
+    errors: null,
+    meta: null,
+    timestamp: new Date().toISOString(),
+  };
+};
+
+export const createMaintenanceRequestsResponse = (
+  data: MaintenanceRequestResponse[],
+  message: string = "Success"
+): ApiResponse<MaintenanceRequestResponse[]> => {
+  return {
+    success: true,
+    message,
+    data,
+    errorCode: null,
+    errors: null,
+    meta: null,
+    timestamp: new Date().toISOString(),
+  };
+};
+
+export const createMaintenanceCommentResponse = (
+  data: MaintenanceComment,
+  message: string = "Success"
+): ApiResponse<MaintenanceComment> => {
+  return {
+    success: true,
+    message,
+    data,
+    errorCode: null,
+    errors: null,
+    meta: null,
+    timestamp: new Date().toISOString(),
+  };
+};
+
+export const createMaintenanceAttachmentResponse = (
+  data: MaintenanceAttachment,
+  message: string = "Success"
+): ApiResponse<MaintenanceAttachment> => {
+  return {
+    success: true,
+    message,
+    data,
+    errorCode: null,
+    errors: null,
+    meta: null,
+    timestamp: new Date().toISOString(),
+  };
+};
