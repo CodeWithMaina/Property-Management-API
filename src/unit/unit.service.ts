@@ -18,7 +18,7 @@ import {
   UnitAmenityInput,
   UnitStatusChangeInput
 } from "./unit.validator";
-import { NotFoundError, ConflictError, ValidationError } from "../utils/errorHandler";
+import { NotFoundError, ConflictError, ValidationError, DatabaseError, PropertyNotFoundError } from "../utils/errorHandler";
 
 /**
  * Get all units with optional filtering and pagination
@@ -215,14 +215,13 @@ export const getUnitByIdServices = async (
 export const createUnitServices = async (
   unitData: UnitInput
 ): Promise<Unit> => {
-  // Check if property exists
+  // Check if property exists - FIXED QUERY
   const propertyExists = await db.query.properties.findFirst({
-    where: eq(properties.id, unitData.propertyId),
-    columns: { id: true }
+    where: eq(properties.id, unitData.propertyId)
   });
 
   if (!propertyExists) {
-    throw new NotFoundError("Property");
+    throw new PropertyNotFoundError(); // Use your custom error
   }
 
   // Check if unit code is unique within the property
@@ -238,7 +237,7 @@ export const createUnitServices = async (
   }
 
   // Prepare data for insertion
-   const insertData = {
+  const insertData = {
     propertyId: unitData.propertyId,
     code: unitData.code,
     floor: unitData.floor || null,
@@ -251,12 +250,18 @@ export const createUnitServices = async (
     metadata: unitData.metadata || {},
   };
 
-  const result = await db.insert(units)
-    .values(insertData)
-    .returning();
-  
-  return result[0];
+  try {
+    const result = await db.insert(units)
+      .values(insertData)
+      .returning();
+    
+    return result[0];
+  } catch (error) {
+    console.error('Database error in createUnitServices:', error);
+    throw new DatabaseError('Failed to create unit');
+  }
 };
+
 
 /**
  * Update an existing unit
@@ -369,7 +374,7 @@ export const getUnitAmenitiesServices = async (
     throw new NotFoundError("Unit");
   }
 
-  return await db.query.unitAmenities.findMany({
+  const amenities = await db.query.unitAmenities.findMany({
     where: eq(unitAmenities.unitId, unitId),
     with: {
       amenity: {
@@ -381,6 +386,16 @@ export const getUnitAmenitiesServices = async (
       }
     }
   });
+
+  // Transform the data to a more usable format
+  return amenities.map(item => ({
+    id: item.amenity.id,
+    name: item.amenity.name,
+    description: item.amenity.description,
+    // Add any other fields from unitAmenities if needed
+    unitAmenityId: item.id,
+    createdAt: item.createdAt,
+  }));
 };
 
 /**

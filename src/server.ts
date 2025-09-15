@@ -8,17 +8,14 @@ import organizationRouter from "./organization/organization.route";
 import leaseRouter from "./lease/lease.route";
 import amenitiesRouter from "./amenity/amenity.route";
 import invoiceRoutes from "./invoice/invoice.route";
+import { errorHandler, notFoundHandler } from "./utils/errorHandler";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-app.get("/", (req: Request, res: Response) => {
-  res.send("✅ Property Management Backend is running.");
-});
-
-// CORS
+// CORS - should be first
 app.use(
   cors({
     origin: ["http://localhost:5173"],
@@ -28,14 +25,11 @@ app.use(
   })
 );
 
-// 🧾 Logging
-// app.use(logger);
-
 // 🔍 Body Parsers (for all other routes)
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 📦 API Routes
+// 📦 API Routes - should come after middleware but before error handlers
 app.use('/api', propertyRouter)
 app.use('/api', unitRouter)
 app.use('/api', leaseRouter)
@@ -44,6 +38,16 @@ app.use('/api', userRouter)
 app.use('/api', organizationRouter)
 app.use('/api', invoiceRoutes)
 
+// Health check route
+app.get("/", (req: Request, res: Response) => {
+  res.send("✅ Property Management Backend is running.");
+});
+
+// 404 handler should be AFTER all routes
+app.use(notFoundHandler);
+
+// Error handler should be the VERY LAST middleware
+app.use(errorHandler); 
 
 // 🚀 Start Server
 app.listen(PORT, () => {

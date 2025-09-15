@@ -4,21 +4,43 @@ import { createActivityLog, createBatchActivityLogs } from '../activityLog/activ
 import { NewActivityLog } from '../drizzle/schema';
 import { AppError } from '../utils/errorHandler';
 
+// Helper type to handle the conversion between application and database types
+type DatabaseActivityLog = Omit<NewActivityLog, 'changes' | 'metadata'> & {
+  changes?: string | null;
+  metadata?: string | null;
+};
+
 export interface ActivityLogData extends Omit<NewActivityLog, 'ipAddress' | 'userAgent' | 'createdAt'> {
   ipAddress?: string;
   userAgent?: string;
-  changes?: Record<string, unknown>;
   description?: string;
+  metadata?: Record<string, unknown>;
 }
 
-export interface BatchActivityLogData extends ActivityLogData {
+export interface BatchActivityLogData extends Omit<ActivityLogData, 'createdAt'> {
   timestamp?: Date;
 }
 
 /**
  * Utility class for consistent activity logging across the application
+ * Provides typed methods for common activity logging operations
  */
 export class ActivityLogger {
+  /**
+   * Convert application-level activity data to database format
+   * @param logData - Activity data in application format
+   * @returns Activity data in database format
+   */
+  private static convertToDatabaseFormat(logData: ActivityLogData): DatabaseActivityLog {
+    return {
+      ...logData,
+      ipAddress: logData.ipAddress ?? null,
+      userAgent: logData.userAgent ?? null,
+      changes: logData.changes ? JSON.stringify(logData.changes) : null,
+      metadata: logData.metadata ? JSON.stringify(logData.metadata) : null,
+    };
+  }
+
   /**
    * Log a single activity
    * @param logData - The activity data to log
@@ -26,14 +48,8 @@ export class ActivityLogger {
    */
   static async logActivity(logData: ActivityLogData): Promise<NewActivityLog | null> {
     try {
-      const validatedData: NewActivityLog = {
-        ...logData,
-        ipAddress: logData.ipAddress || null,
-        userAgent: logData.userAgent || null,
-        changes: logData.changes ? JSON.stringify(logData.changes) : null,
-      };
-
-      const log = await createActivityLog(validatedData);
+      const databaseData = this.convertToDatabaseFormat(logData);
+      const log = await createActivityLog(databaseData as NewActivityLog);
       
       if (!log) {
         console.warn('Activity logging failed silently for:', logData);
@@ -63,15 +79,12 @@ export class ActivityLogger {
         throw new AppError('Empty batch data', 400);
       }
 
-      const validatedData: NewActivityLog[] = logsData.map(logData => ({
-        ...logData,
-        ipAddress: logData.ipAddress || null,
-        userAgent: logData.userAgent || null,
-        changes: logData.changes ? JSON.stringify(logData.changes) : null,
-        createdAt: logData.timestamp || new Date(),
+      const validatedData: DatabaseActivityLog[] = logsData.map(logData => ({
+        ...this.convertToDatabaseFormat(logData),
+        createdAt: logData.timestamp ?? new Date(),
       }));
 
-      const result = await createBatchActivityLogs(validatedData);
+      const result = await createBatchActivityLogs(validatedData as NewActivityLog[]);
       return {
         success: result.length,
         failed: logsData.length - result.length,
@@ -85,6 +98,10 @@ export class ActivityLogger {
 
   /**
    * Log a create action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static created(
     entity: TargetTableType,
@@ -104,7 +121,7 @@ export class ActivityLogger {
       action: ActivityAction.create,
       targetTable: entity,
       targetId: id,
-      description: options.description || `${entity} created`,
+      description: options.description ?? `${entity} created`,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
       metadata: options.metadata,
@@ -113,6 +130,11 @@ export class ActivityLogger {
 
   /**
    * Log an update action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param changes - The changes made to the entity
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static updated(
     entity: TargetTableType,
@@ -133,7 +155,7 @@ export class ActivityLogger {
       action: ActivityAction.update,
       targetTable: entity,
       targetId: id,
-      description: options.description || `${entity} updated`,
+      description: options.description ?? `${entity} updated`,
       changes,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
@@ -143,6 +165,10 @@ export class ActivityLogger {
 
   /**
    * Log a delete action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static deleted(
     entity: TargetTableType,
@@ -162,7 +188,7 @@ export class ActivityLogger {
       action: ActivityAction.delete,
       targetTable: entity,
       targetId: id,
-      description: options.description || `${entity} deleted`,
+      description: options.description ?? `${entity} deleted`,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
       metadata: options.metadata,
@@ -171,6 +197,11 @@ export class ActivityLogger {
 
   /**
    * Log a status change action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param newStatus - The new status value
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static statusChange(
     entity: TargetTableType,
@@ -191,7 +222,7 @@ export class ActivityLogger {
       action: ActivityAction.statusChange,
       targetTable: entity,
       targetId: id,
-      description: options.description || `${entity} status changed to ${newStatus}`,
+      description: options.description ?? `${entity} status changed to ${newStatus}`,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
       metadata: options.metadata,
@@ -200,6 +231,11 @@ export class ActivityLogger {
 
   /**
    * Log an assignment action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param assigneeId - The ID of the user being assigned
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static assigned(
     entity: TargetTableType,
@@ -220,7 +256,7 @@ export class ActivityLogger {
       action: ActivityAction.assign,
       targetTable: entity,
       targetId: id,
-      description: options.description || `${entity} assigned to user ${assigneeId}`,
+      description: options.description ?? `${entity} assigned to user ${assigneeId}`,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
       metadata: options.metadata,
@@ -229,6 +265,12 @@ export class ActivityLogger {
 
   /**
    * Log a payment action
+   * @param entity - The target entity type
+   * @param id - The target entity ID
+   * @param amount - The payment amount
+   * @param currency - The payment currency
+   * @param options - Additional logging options
+   * @returns Promise that resolves to the created log or null
    */
   static payment(
     entity: TargetTableType,
@@ -250,7 +292,7 @@ export class ActivityLogger {
       action: ActivityAction.payment,
       targetTable: entity,
       targetId: id,
-      description: options.description || `Payment of ${amount} ${currency} processed for ${entity}`,
+      description: options.description ?? `Payment of ${amount} ${currency} processed for ${entity}`,
       ipAddress: options.ipAddress,
       userAgent: options.userAgent,
       metadata: options.metadata,

@@ -43,9 +43,16 @@ export class AuthorizationError extends AppError {
 }
 
 export class NotFoundError extends AppError {
-  constructor(resource: string = "Resource") {
-    super(`${resource} not found`, 404);
+  constructor(message: string = "Resource not found") {
+    super(message, 404);
     this.name = "NotFoundError";
+  }
+}
+
+export class PropertyNotFoundError extends NotFoundError {
+  constructor() {
+    super("Property not found");
+    this.name = "PropertyNotFoundError";
   }
 }
 
@@ -80,6 +87,8 @@ interface ErrorResponse {
     details?: any;
     timestamp: string;
     requestId?: string;
+    path: string;
+    method: string;
   };
 }
 
@@ -113,7 +122,7 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ): void => {
-  // Log the error
+  // Enhanced logging
   logError(error, req);
 
   let statusCode = 500;
@@ -122,12 +131,32 @@ export const errorHandler = (
   let details: any = undefined;
   let isOperational = false;
 
-  // Handle different error types
-  if (error instanceof AppError) {
+  // Handle different error types with more specific cases
+  if (error instanceof PropertyNotFoundError) {
+    statusCode = 404;
+    message = error.message;
+    code = "PROPERTY_NOT_FOUND";
+    isOperational = true;
+  } else if (error instanceof NotFoundError) {
+    statusCode = error.statusCode;
+    message = error.message;
+    code = error.name;
+    isOperational = true;
+  } else if (error instanceof ValidationError) {
     statusCode = error.statusCode;
     message = error.message;
     code = error.name;
     details = error.details;
+    isOperational = true;
+  } else if (error instanceof ConflictError) {
+    statusCode = error.statusCode;
+    message = error.message;
+    code = error.name;
+    isOperational = true;
+  } else if (error instanceof DatabaseError) {
+    statusCode = error.statusCode;
+    message = error.message;
+    code = error.name;
     isOperational = error.isOperational;
   } else if (error instanceof ZodError) {
     statusCode = 400;
@@ -149,21 +178,18 @@ export const errorHandler = (
     message = "Token expired";
     code = "TOKEN_EXPIRED";
     isOperational = true;
-  } else if (
-    error.name === "MongoError" ||
-    error.name === "PrismaClientKnownRequestError"
-  ) {
-    statusCode = 400;
-    message = "Database operation failed";
-    code = "DATABASE_ERROR";
-    isOperational = true;
-
-    // Handle specific database errors
-    if ((error as any).code === 11000) {
-      statusCode = 409;
-      message = "Duplicate entry";
-      code = "DUPLICATE_ENTRY";
-    }
+  } else if (error instanceof AppError) {
+    statusCode = error.statusCode;
+    message = error.message;
+    code = error.name;
+    details = error.details;
+    isOperational = error.isOperational;
+  } else {
+    // Generic error handling
+    statusCode = 500;
+    message = "Internal server error";
+    code = "INTERNAL_ERROR";
+    isOperational = false;
   }
 
   // Prepare error response
@@ -174,7 +200,9 @@ export const errorHandler = (
       code,
       details,
       timestamp: new Date().toISOString(),
-      requestId: (req as any).id, // If you're using request ID middleware
+      requestId: (req as any).id,
+      path: req.path,
+      method: req.method,
     },
   };
 
@@ -196,7 +224,7 @@ export const asyncHandler = <T>(
   };
 };
 
-// 404 handler middleware
+// 404 handler middleware - FIXED: Remove duplicate "not found"
 export const notFoundHandler = (
   req: Request,
   res: Response,
@@ -227,6 +255,7 @@ export const ErrorCodes = {
   AUTHENTICATION_ERROR: "AUTHENTICATION_ERROR",
   AUTHORIZATION_ERROR: "AUTHORIZATION_ERROR",
   NOT_FOUND_ERROR: "NOT_FOUND_ERROR",
+  PROPERTY_NOT_FOUND_ERROR: "PROPERTY_NOT_FOUND_ERROR",
   CONFLICT_ERROR: "CONFLICT_ERROR",
   RATE_LIMIT_ERROR: "RATE_LIMIT_ERROR",
   DATABASE_ERROR: "DATABASE_ERROR",

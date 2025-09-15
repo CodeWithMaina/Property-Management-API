@@ -86,10 +86,7 @@ export const getUnitById = asyncHandler(
       throw new NotFoundError("Unit");
     }
 
-    const response = createUnitResponse(
-      unit,
-      "Unit retrieved successfully"
-    );
+    const response = createUnitResponse(unit, "Unit retrieved successfully");
 
     res.status(200).json(response);
   }
@@ -102,17 +99,24 @@ export const getUnitById = asyncHandler(
  */
 export const createUnit = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    // Validate request body
-    const validatedData = UnitSchema.parse(req.body);
+    try {
+      // Validate request body
+      const validatedData = UnitSchema.parse(req.body);
 
-    const newUnit = await createUnitServices(validatedData);
+      console.log("Creating unit with data:", validatedData);
 
-    const response = createSuccessResponse(
-      newUnit,
-      "Unit created successfully"
-    );
+      const newUnit = await createUnitServices(validatedData);
 
-    res.status(201).json(response);
+      const response = createSuccessResponse(
+        newUnit,
+        "Unit created successfully"
+      );
+
+      res.status(201).json(response);
+    } catch (error) {
+      console.error("Error in createUnit controller:", error);
+      throw error; // Let the error handler middleware handle it
+    }
   }
 );
 
@@ -183,12 +187,14 @@ export const deleteUnit = asyncHandler(
 export const getUnitAmenities = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const unitId = req.params.id;
+    console.log("Fetching amenities for unit:", unitId);
 
     if (!unitId) {
       throw new ValidationError("Unit ID is required");
     }
 
     const amenities = await getUnitAmenitiesServices(unitId);
+    console.log("Retrieved amenities:", amenities);
 
     const response = createSuccessResponse(
       amenities,
@@ -291,7 +297,11 @@ export const markUnitOccupied = asyncHandler(
     // Validate request body
     const validatedData = UnitStatusChangeSchema.parse(req.body);
 
-    const updatedUnit = await updateUnitStatusServices(unitId, "occupied", validatedData);
+    const updatedUnit = await updateUnitStatusServices(
+      unitId,
+      "occupied",
+      validatedData
+    );
 
     if (!updatedUnit) {
       throw new NotFoundError("Unit");
@@ -322,7 +332,11 @@ export const markUnitVacant = asyncHandler(
     // Validate request body
     const validatedData = UnitStatusChangeSchema.parse(req.body);
 
-    const updatedUnit = await updateUnitStatusServices(unitId, "vacant", validatedData);
+    const updatedUnit = await updateUnitStatusServices(
+      unitId,
+      "vacant",
+      validatedData
+    );
 
     if (!updatedUnit) {
       throw new NotFoundError("Unit");
@@ -353,10 +367,14 @@ export const markUnitUnavailable = asyncHandler(
     // Validate request body
     const validatedData = UnitStatusChangeSchema.parse(req.body);
 
-    const updatedUnit = await updateUnitStatusServices(unitId, "unavailable", validatedData);
+    const updatedUnit = await updateUnitStatusServices(
+      unitId,
+      "unavailable",
+      validatedData
+    );
 
     if (!updatedUnit) {
-      throw new NotFoundError("Unit");
+      throw new NotFoundError("Unit not found");
     }
 
     const response = createSuccessResponse(

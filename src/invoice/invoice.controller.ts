@@ -25,16 +25,11 @@ import {
   VoidInvoiceSchema,
   InvoiceReminderSchema,
 } from "./invoice.validator";
-import {
-  ValidationError,
-  asyncHandler,
-  NotFoundError,
-} from "../utils/errorHandler";
-import {
-  createSuccessResponse,
-  createPaginatedResponse,
-  createInvoiceResponse,
-} from "../utils/apiResponse/apiResponse.helper";
+import { asyncHandler, ValidationError,
+  NotFoundError, } from "../utils/errorHandler";
+import ActivityLogger from "../utils/activityLogger";
+import { createInvoiceResponse, createSuccessResponse,
+  createPaginatedResponse, } from "../utils/apiResponse/apiResponse.helper";
 
 /**
  * @route GET /invoices
@@ -91,10 +86,23 @@ export const createInvoice = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const newInvoice = await createInvoiceService(
       validatedData,
       organizationId
+    );
+
+    // Log activity
+    await ActivityLogger.created(
+      'invoices',
+      newInvoice.id,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice ${newInvoice.invoiceNumber} created`,
+        metadata: { invoiceData: validatedData }
+      }
     );
 
     const response = createSuccessResponse(
@@ -155,6 +163,7 @@ export const updateInvoice = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const updatedInvoice = await updateInvoiceService(
       invoiceId,
@@ -165,6 +174,19 @@ export const updateInvoice = asyncHandler(
     if (!updatedInvoice) {
       throw new NotFoundError("Invoice");
     }
+
+    // Log activity
+    await ActivityLogger.updated(
+      'invoices',
+      invoiceId,
+      validatedData,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice ${updatedInvoice.invoiceNumber} updated`,
+        metadata: { updateData: validatedData }
+      }
+    );
 
     const response = createSuccessResponse(
       updatedInvoice,
@@ -193,6 +215,7 @@ export const updateInvoiceStatus = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const updatedInvoice = await updateInvoiceStatusService(
       invoiceId,
@@ -204,6 +227,19 @@ export const updateInvoiceStatus = asyncHandler(
     if (!updatedInvoice) {
       throw new NotFoundError("Invoice");
     }
+
+    // Log activity
+    await ActivityLogger.statusChange(
+      'invoices',
+      invoiceId,
+      validatedData.status,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice ${updatedInvoice.invoiceNumber} status changed to ${validatedData.status}`,
+        metadata: { statusData: validatedData }
+      }
+    );
 
     const response = createSuccessResponse(
       updatedInvoice,
@@ -232,6 +268,7 @@ export const voidInvoice = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const voidedInvoice = await voidInvoiceService(
       invoiceId,
@@ -242,6 +279,19 @@ export const voidInvoice = asyncHandler(
     if (!voidedInvoice) {
       throw new NotFoundError("Invoice");
     }
+
+    // Log activity
+    await ActivityLogger.statusChange(
+      'invoices',
+      invoiceId,
+      'void',
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice ${voidedInvoice.invoiceNumber} voided`,
+        metadata: { voidData: validatedData }
+      }
+    );
 
     const response = createSuccessResponse(
       voidedInvoice,
@@ -270,11 +320,24 @@ export const addInvoiceItem = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const newItem = await addInvoiceItemService(
       invoiceId,
       validatedData,
       organizationId
+    );
+
+    // Log activity
+    await ActivityLogger.created(
+      'invoiceItems',
+      newItem.id,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Item added to invoice ${invoiceId}`,
+        metadata: { itemData: validatedData }
+      }
     );
 
     const response = createSuccessResponse(
@@ -304,6 +367,7 @@ export const updateInvoiceItem = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const updatedItem = await updateInvoiceItemService(
       invoiceId,
@@ -315,6 +379,19 @@ export const updateInvoiceItem = asyncHandler(
     if (!updatedItem) {
       throw new NotFoundError("Invoice item");
     }
+
+    // Log activity
+    await ActivityLogger.updated(
+      'invoiceItems',
+      itemId,
+      validatedData,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Item ${itemId} updated in invoice ${invoiceId}`,
+        metadata: { updateData: validatedData }
+      }
+    );
 
     const response = createSuccessResponse(
       updatedItem,
@@ -340,6 +417,7 @@ export const removeInvoiceItem = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const removedItem = await removeInvoiceItemService(
       invoiceId,
@@ -350,6 +428,18 @@ export const removeInvoiceItem = asyncHandler(
     if (!removedItem) {
       throw new NotFoundError("Invoice item");
     }
+
+    // Log activity
+    await ActivityLogger.deleted(
+      'invoiceItems',
+      itemId,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Item ${itemId} removed from invoice ${invoiceId}`,
+        metadata: { removedItem }
+      }
+    );
 
     const response = createSuccessResponse(
       removedItem,
@@ -372,10 +462,23 @@ export const batchGenerateInvoices = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const result = await batchGenerateInvoicesService(
       validatedData,
       organizationId
+    );
+
+    // Log activity
+    await ActivityLogger.created(
+      'invoices',
+      'batch',
+      {
+        userId,
+        orgId: organizationId,
+        description: `Batch generated ${result.generated} invoices, skipped ${result.skipped}`,
+        metadata: { batchData: validatedData, result }
+      }
     );
 
     const response = createSuccessResponse(
@@ -402,10 +505,23 @@ export const generateLeaseInvoice = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const newInvoice = await generateLeaseInvoiceService(
       leaseId,
       organizationId
+    );
+
+    // Log activity
+    await ActivityLogger.created(
+      'invoices',
+      newInvoice.id,
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice generated for lease ${leaseId}`,
+        metadata: { leaseId, invoice: newInvoice }
+      }
     );
 
     const response = createSuccessResponse(
@@ -432,6 +548,7 @@ export const issueInvoice = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const issuedInvoice = await updateInvoiceStatusService(
       invoiceId,
@@ -443,6 +560,19 @@ export const issueInvoice = asyncHandler(
     if (!issuedInvoice) {
       throw new NotFoundError("Invoice");
     }
+
+    // Log activity
+    await ActivityLogger.statusChange(
+      'invoices',
+      invoiceId,
+      'issued',
+      {
+        userId,
+        orgId: organizationId,
+        description: `Invoice ${issuedInvoice.invoiceNumber} issued`,
+        metadata: { previousStatus: 'draft' }
+      }
+    );
 
     const response = createSuccessResponse(
       issuedInvoice,
@@ -471,11 +601,25 @@ export const sendInvoiceReminder = asyncHandler(
 
     // Get organization ID from authenticated user
     const organizationId = (req as any).user.organizationId;
+    const userId = (req as any).user.id;
 
     const result = await sendInvoiceReminderService(
       invoiceId,
       validatedData,
       organizationId
+    );
+
+    // Log activity
+    await ActivityLogger.updated(
+      'invoices',
+      invoiceId,
+      { reminderSent: true },
+      {
+        userId,
+        orgId: organizationId,
+        description: `Reminder sent for invoice ${invoiceId}`,
+        metadata: { reminderData: validatedData }
+      }
     );
 
     const response = createSuccessResponse(
