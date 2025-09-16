@@ -46,6 +46,7 @@ export const LeaseQuerySchema = z.object({
 
 // Status change schema
 export const LeaseStatusChangeSchema = z.object({
+  status: z.enum(["draft", "active", "pendingMoveIn", "ended", "terminated", "cancelled"] as const).optional(),
   reason: z.string().min(1, "Reason is required").max(255, "Reason cannot exceed 255 characters"),
   notes: z.string().optional(),
   effectiveDate: z.coerce.date().optional().default(new Date()),

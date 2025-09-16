@@ -30,14 +30,10 @@ const leaseRouter = Router();
 // leaseRouter.use(authenticateToken);
 
 // GET /leases - List all leases (filterable by tenant, property, status)
-leaseRouter.get("/leases", validate(LeaseQuerySchema, 'query'), getLeases);
+leaseRouter.get("/leases", validate(LeaseQuerySchema, "query"), getLeases);
 
 // POST /leases - Create a new lease (typically in 'draft' status)
-leaseRouter.post(
-  "/leases",
-  validate(LeaseSchema, 'body'),
-  createLease
-);
+leaseRouter.post("/leases", validate(LeaseSchema, "body"), createLease);
 
 // GET /leases/:id - Get specific lease details
 leaseRouter.get("/leases/:id", getLeaseById);
@@ -45,48 +41,45 @@ leaseRouter.get("/leases/:id", getLeaseById);
 // PUT /leases/:id - Update lease information
 leaseRouter.put(
   "/leases/:id",
-  validate(PartialLeaseSchema, 'body'),
+  validate(PartialLeaseSchema, "body"),
   updateLease
 );
 
 // DELETE /leases/:id - Delete a lease
-leaseRouter.delete(
-  "/leases/:id",
-  deleteLease
-);
+leaseRouter.delete("/leases/:id", deleteLease);
 
 // POST /leases/:id/activate - Transition a lease to 'active'
 leaseRouter.post(
   "/leases/:id/activate",
-  validate(LeaseStatusChangeSchema, 'body'),
+  validate(LeaseStatusChangeSchema, "body"),
   activateLease
 );
 
 // POST /leases/:id/terminate - Terminate a lease early
 leaseRouter.post(
   "/leases/:id/terminate",
-  validate(LeaseStatusChangeSchema, 'body'),
+  validate(LeaseStatusChangeSchema, "body"),
   terminateLease
 );
 
 // POST /leases/:id/renew - Create a new lease based on an expiring one
 leaseRouter.post(
   "/leases/:id/renew",
-  validate(LeaseRenewalSchema, 'body'),
+  validate(LeaseRenewalSchema, "body"),
   renewLease
 );
 
 // POST /leases/:id/cancel - Cancel a draft or pending lease
 leaseRouter.post(
   "/leases/:id/cancel",
-  validate(LeaseStatusChangeSchema, 'body'),
+  validate(LeaseStatusChangeSchema, "body"),
   cancelLease
 );
 
 // PATCH /leases/:id/status - Directly update lease status
 leaseRouter.patch(
   "/leases/:id/status",
-  validate(LeaseStatusChangeSchema, 'body'),
+  validate(LeaseStatusChangeSchema, "body"),
   updateLeaseStatus
 );
 
@@ -98,5 +91,11 @@ leaseRouter.get("/leases/property/:propertyId", getLeasesByProperty);
 
 // GET /leases/:id/balance - Calculate the real-time outstanding balance for the lease
 leaseRouter.get("/leases/:id/balance", getLeaseBalance);
+
+leaseRouter.post(
+  "/leases/:id/activate",
+  validate(LeaseStatusChangeSchema, "body"),
+  activateLease
+);
 
 export default leaseRouter;
