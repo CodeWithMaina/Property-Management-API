@@ -1,264 +1,199 @@
 import { Request, Response } from "express";
-import {
-  getPropertiesServices,
-  getPropertyByIdServices,
-  createPropertyServices,
-  updatePropertyServices,
-  deletePropertyServices,
-  getPropertyManagersServices,
-  assignPropertyManagerServices,
-  removePropertyManagerServices,
-} from "./property.service";
+import { propertyService } from "./property.service";
 import {
   PartialPropertySchema,
-  PropertyManagerSchema,
   PropertyQuerySchema,
   PropertySchema,
+  PropertyDeleteQuerySchema,
 } from "./property.validator";
 import {
-  asyncHandler,
   NotFoundError,
+  asyncHandler,
   ValidationError,
-  ConflictError,
 } from "../utils/errorHandler";
 import {
-  createPaginatedResponse,
   createSuccessResponse,
-  createErrorResponse,
-  createPropertiesResponse,
+  createPaginatedResponse,
   createPropertyResponse,
 } from "../utils/apiResponse/apiResponse.helper";
 
 /**
- * Get all properties with optional filtering
+ * Controller for property-related HTTP operations
  */
-export const getProperties = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    // Validate query parameters
-    const queryParams = PropertyQuerySchema.parse(req.query);
+export class PropertyController {
+  /**
+   * Get all properties with optional filtering
+   */
+  getProperties = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      // Validate query parameters
+      const queryParams = PropertyQuerySchema.parse(req.query);
 
-    const result = await getPropertiesServices(queryParams);
+      const result = await propertyService.getProperties(queryParams);
 
-    // Create pagination object in the expected format
-    const pagination = {
-      total: result.total,
-      count: result.properties.length,
-      perPage: queryParams.limit,
-      currentPage: queryParams.page,
-      totalPages: Math.ceil(result.total / queryParams.limit),
-      links: {
-        first: null,
-        last: null,
-        prev: null,
-        next: null,
-      },
-    };
+      // Create pagination object
+      const pagination = {
+        total: result.total,
+        count: result.properties.length,
+        perPage: queryParams.limit,
+        currentPage: queryParams.page,
+        totalPages: Math.ceil(result.total / queryParams.limit),
+        links: {
+          first: null,
+          last: null,
+          prev: null,
+          next: null,
+        },
+      };
 
-    const response = createPaginatedResponse(
-      result.properties,
-      pagination,
-      "Properties retrieved successfully"
-    );
+      const response = createPaginatedResponse(
+        result.properties,
+        pagination,
+        "Properties retrieved successfully"
+      );
 
-    res.status(200).json(response);
-  }
-);
-
-/**
- * Get specific property details
- */
-export const getPropertyById = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-
-    if (!propertyId) {
-      throw new ValidationError("Property ID is required");
+      res.status(200).json(response);
     }
+  );
 
-    const property = await getPropertyByIdServices(propertyId);
+  /**
+   * Get specific property details
+   */
+  getPropertyById = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const propertyId = req.params.id;
 
-    if (!property) {
-      throw new NotFoundError("Property");
+      if (!propertyId) {
+        throw new ValidationError("Property ID is required");
+      }
+
+      const property = await propertyService.getPropertyById(propertyId);
+
+      if (!property) {
+        throw new NotFoundError("Property does not exist");
+      }
+
+      const response = createPropertyResponse(
+        property,
+        "Property retrieved successfully"
+      );
+
+      res.status(200).json(response);
     }
+  );
 
-    const response = createPropertyResponse(
-      property,
-      "Property retrieved successfully"
-    );
+  /**
+   * Create a new property
+   */
+  createProperty = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      // Validate request body
+      const validatedData = PropertySchema.parse(req.body);
 
-    res.status(200).json(response);
-  }
-);
+      const newProperty = await propertyService.createProperty(validatedData);
 
-/**
- * Create a new property
- */
-export const createProperty = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    // Validate request body
-    const validatedData = PropertySchema.parse(req.body);
+      const response = createSuccessResponse(
+        newProperty,
+        "Property created successfully"
+      );
 
-    const newProperty = await createPropertyServices(validatedData);
-
-    const response = createSuccessResponse(
-      newProperty,
-      "Property created successfully"
-    );
-
-    res.status(201).json(response);
-  }
-);
-
-/**
- * Update property information
- */
-export const updateProperty = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-
-    if (!propertyId) {
-      throw new ValidationError("Property ID is required");
+      res.status(201).json(response);
     }
+  );
 
-    // Validate request body
-    const validatedData = PartialPropertySchema.parse(req.body);
+  /**
+   * Update property information
+   */
+  updateProperty = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const propertyId = req.params.id;
 
-    const updatedProperty = await updatePropertyServices(
-      propertyId,
-      validatedData
-    );
+      if (!propertyId) {
+        throw new ValidationError("Property ID is required");
+      }
 
-    if (!updatedProperty) {
-      throw new NotFoundError("Property");
-    }
+      // Validate request body
+      const validatedData = PartialPropertySchema.parse(req.body);
 
-    const response = createSuccessResponse(
-      updatedProperty,
-      "Property updated successfully"
-    );
-
-    res.status(200).json(response);
-  }
-);
-
-/**
- * Delete a property (soft delete)
- */
-export const deleteProperty = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-
-    if (!propertyId) {
-      throw new ValidationError("Property ID is required");
-    }
-
-    const deletedProperty = await deletePropertyServices(propertyId);
-
-    if (!deletedProperty) {
-      throw new NotFoundError("Property");
-    }
-
-    const response = createSuccessResponse(
-      deletedProperty,
-      "Property deleted successfully"
-    );
-
-    res.status(200).json(response);
-  }
-);
-
-/**
- * List managers/users associated with a property
- */
-export const getPropertyManagers = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-
-    if (!propertyId) {
-      throw new ValidationError("Property ID is required");
-    }
-
-    const managers = await getPropertyManagersServices(propertyId);
-
-    const response = createSuccessResponse(
-      managers,
-      "Property managers retrieved successfully"
-    );
-
-    res.status(200).json(response);
-  }
-);
-
-/**
- * Assign a manager to a property
- */
-export const assignPropertyManager = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-
-    if (!propertyId) {
-      throw new ValidationError("Property ID is required");
-    }
-
-    // Validate request body
-    const validatedData = PropertyManagerSchema.parse(req.body);
-
-    try {
-      const assignment = await assignPropertyManagerServices(
+      const updatedProperty = await propertyService.updateProperty(
         propertyId,
         validatedData
       );
 
-      const response = createSuccessResponse(
-        assignment,
-        "Manager assigned successfully"
-      );
-
-      res.status(201).json(response);
-    } catch (error: any) {
-      if (
-        error.message === "User not found" ||
-        error.message === "Property not found"
-      ) {
-        throw new NotFoundError(error.message);
+      if (!updatedProperty) {
+        throw new NotFoundError("Property not updated");
       }
 
-      if (error.message === "Manager is already assigned to this property") {
-        throw new ConflictError(error.message);
-      }
-
-      throw error;
-    }
-  }
-);
-
-/**
- * Remove a manager from a property
- */
-export const removePropertyManager = asyncHandler(
-  async (req: Request, res: Response): Promise<void> => {
-    const propertyId = req.params.id;
-    const userId = req.params.userId;
-
-    if (!propertyId || !userId) {
-      throw new ValidationError("Property ID and User ID are required");
-    }
-
-    try {
-      const result = await removePropertyManagerServices(propertyId, userId);
-
       const response = createSuccessResponse(
-        result,
-        "Manager removed successfully"
+        updatedProperty,
+        "Property updated successfully"
       );
 
       res.status(200).json(response);
-    } catch (error: any) {
-      if (error.message === "Manager assignment not found") {
-        throw new NotFoundError(error.message);
+    }
+  );
+
+  /**
+   * Delete a property with option for hard or soft delete
+   * @param hardDelete - If true, permanently removes the property from database
+   * @param softDelete - If true (default), sets isActive to false (soft delete)
+   * @returns Deleted property object or undefined if hard delete was performed
+   */
+  deleteProperty = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const propertyId = req.params.id;
+
+      if (!propertyId) {
+        throw new ValidationError("Property ID is required");
       }
 
-      throw error;
+      // Validate query parameters for delete operation
+      const deleteQuery = PropertyDeleteQuerySchema.parse(req.query);
+      const hardDelete = deleteQuery.hardDelete || false;
+
+      const result = await propertyService.deleteProperty(propertyId, hardDelete);
+
+      if (!result) {
+        throw new NotFoundError("Property not found or already deleted");
+      }
+
+      const response = createSuccessResponse(
+        hardDelete ? { id: propertyId, deleted: true } : result,
+        hardDelete 
+          ? "Property permanently deleted successfully" 
+          : "Property deactivated successfully"
+      );
+
+      res.status(200).json(response);
     }
-  }
-);
+  );
+
+  /**
+   * Restore a soft-deleted property (set isActive back to true)
+   */
+  restoreProperty = asyncHandler(
+    async (req: Request, res: Response): Promise<void> => {
+      const propertyId = req.params.id;
+
+      if (!propertyId) {
+        throw new ValidationError("Property ID is required");
+      }
+
+      const restoredProperty = await propertyService.restoreProperty(propertyId);
+
+      if (!restoredProperty) {
+        throw new NotFoundError("Property not found or not deleted");
+      }
+
+      const response = createSuccessResponse(
+        restoredProperty,
+        "Property restored successfully"
+      );
+
+      res.status(200).json(response);
+    }
+  );
+}
+
+// Export singleton instance
+export const propertyController = new PropertyController();

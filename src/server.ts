@@ -9,6 +9,7 @@ import leaseRouter from "./lease/lease.route";
 import amenitiesRouter from "./amenity/amenity.route";
 import invoiceRoutes from "./invoice/invoice.route";
 import { errorHandler, notFoundHandler } from "./utils/errorHandler";
+import {propertyManagerRouter} from "./propertyManager/propertyManager.route";
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // 📦 API Routes - should come after middleware but before error handlers
 app.use('/api', propertyRouter)
+app.use('/api', propertyManagerRouter)
 app.use('/api', unitRouter)
 app.use('/api', leaseRouter)
 app.use('/api', amenitiesRouter)

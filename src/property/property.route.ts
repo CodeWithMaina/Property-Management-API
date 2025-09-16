@@ -1,14 +1,5 @@
 import { Router } from "express";
-import {
-  getProperties,
-  getPropertyById,
-  createProperty,
-  updateProperty,
-  deleteProperty,
-  getPropertyManagers,
-  assignPropertyManager,
-  removePropertyManager,
-} from "./property.controller";
+import { propertyController } from "./property.controller";
 
 export const propertyRouter = Router();
 
@@ -17,55 +8,39 @@ export const propertyRouter = Router();
  * @description Get all properties (filterable by organization)
  * @access Private
  */
-propertyRouter.get("/properties", getProperties);
+propertyRouter.get("/properties", propertyController.getProperties);
 
 /**
  * @route POST /properties
  * @description Create a new property
  * @access Private (Admin/Organization Owner)
  */
-propertyRouter.post("/properties", createProperty);
+propertyRouter.post("/properties", propertyController.createProperty);
 
 /**
  * @route GET /properties/:id
  * @description Get specific property details
  * @access Private
  */
-propertyRouter.get("/properties/:id", getPropertyById);
+propertyRouter.get("/properties/:id", propertyController.getPropertyById);
 
 /**
  * @route PUT /properties/:id
  * @description Update property information
  * @access Private (Admin/Organization Owner/Property Manager)
  */
-propertyRouter.put("/properties/:id", updateProperty);
+propertyRouter.put("/properties/:id", propertyController.updateProperty);
 
 /**
  * @route DELETE /properties/:id
- * @description Delete a property (soft delete)
+ * @description Delete a property. Use ?hardDelete=true for permanent deletion.
  * @access Private (Admin/Organization Owner)
  */
-propertyRouter.delete("/properties/:id", deleteProperty);
+propertyRouter.delete("/properties/:id", propertyController.deleteProperty);
 
 /**
- * @route GET /properties/:id/users
- * @description List managers/users associated with a property
- * @access Private
- */
-propertyRouter.get("/properties/:id/users", getPropertyManagers);
-
-/**
- * @route POST /properties/:id/managers
- * @description Assign a manager to a property
+ * @route PATCH /properties/:id/restore
+ * @description Restore a soft-deleted property
  * @access Private (Admin/Organization Owner)
  */
-propertyRouter.post("/properties/:id/managers", assignPropertyManager);
-
-/**
- * @route DELETE /properties/:id/managers/:userId
- * @description Remove a manager from a property
- * @access Private (Admin/Organization Owner)
- */
-propertyRouter.delete("/properties/:id/managers/:userId", removePropertyManager);
-
-export default propertyRouter;
+propertyRouter.patch("/properties/:id/restore", propertyController.restoreProperty);

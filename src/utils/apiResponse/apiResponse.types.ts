@@ -1,6 +1,6 @@
-import { MaintenanceStatusEnum, PriorityEnum, unitAmenities, UnitAmenity } from './../../drizzle/schema';
 // types/api-response.ts
 
+import { MaintenanceStatusEnum, PriorityEnum, unitAmenities, UnitAmenity } from './../../drizzle/schema';
 import { ActivityLog, UnitStatusEnum } from "../../drizzle/schema";
 import { Amenity, Invoice, InvoiceItem, Lease, MaintenanceAttachment, MaintenanceComment, MaintenanceRequest, Organization, Payment, PaymentAllocation, Property, PropertyManager, Receipt, Unit, User, UserOrganization } from "../../drizzle/schema";
 
@@ -90,17 +90,20 @@ export interface MetaData {
 // Entity-specific response types for better type safety
 export interface UserResponse extends User {
   organizations?: UserOrganization[];
-  managedProperties?: PropertyManager[];
+  managedProperties?: PropertyManagerResponse[];
+}
+
+export interface PropertyManagerResponse extends PropertyManager {
+  user?: UserResponse;
+  property?: PropertyResponse;
 }
 
 export interface PropertyResponse extends Property {
   units?: Unit[];
-  managers?: PropertyManager[];
+  managers?: PropertyManagerResponse[];
   maintenanceRequests?: MaintenanceRequest[];
   leases?: Lease[];
 }
-
-
 
 export interface LeaseResponse extends Lease {
   organization?: Organization;
@@ -205,9 +208,3 @@ export interface AmenityResponse {
     };
   }>;
 }
-
-// Add to the existing interface if it exists
-// export interface ApiResponseTypes {
-//   // ... existing types
-//   AmenityResponse: AmenityResponse;
-// }

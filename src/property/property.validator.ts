@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { userRoleEnum } from "../drizzle/schema";
 
 // Base property validation schema
 export const PropertySchema = z.object({
@@ -20,26 +19,25 @@ export const PropertySchema = z.object({
 // Partial update schema
 export const PartialPropertySchema = PropertySchema.partial();
 
-// Property manager assignment schema
-export const PropertyManagerSchema = z.object({
-  userId: z.string().uuid("User ID must be a valid UUID"),
-  role: z.enum(userRoleEnum.enumValues).default("manager"),
-});
-
-// Query parameters schema for filtering properties - FIXED
+// Query parameters schema for filtering properties
 export const PropertyQuerySchema = z.object({
   organizationId: z.string().uuid("Organization ID must be a valid UUID").optional().nullable(),
   isActive: z.string().optional().nullable().transform((val) => {
     if (val === 'true') return true;
     if (val === 'false') return false;
-    return undefined; // Return undefined if not specified
+    return undefined;
   }),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });
 
+// Delete query parameters schema
+export const PropertyDeleteQuerySchema = z.object({
+  hardDelete: z.string().optional().transform((val) => val === 'true'),
+});
+
 // Types
 export type PropertyInput = z.infer<typeof PropertySchema>;
 export type PartialPropertyInput = z.infer<typeof PartialPropertySchema>;
-export type PropertyManagerInput = z.infer<typeof PropertyManagerSchema>;
 export type PropertyQueryParams = z.infer<typeof PropertyQuerySchema>;
+export type PropertyDeleteQueryParams = z.infer<typeof PropertyDeleteQuerySchema>;

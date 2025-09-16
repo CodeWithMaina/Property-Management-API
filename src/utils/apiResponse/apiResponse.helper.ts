@@ -16,7 +16,8 @@ import {
   ActivityLogResponse,
   OrganizationResponse,
   UserOrganizationResponse,
-  AmenityResponse
+  AmenityResponse,
+  PropertyManagerResponse
 } from './apiResponse.types';
 
 interface ResponseParams<T> {
@@ -111,6 +112,28 @@ function getDataMessage<T>(
     return data.length === 0 ? emptyMessage : successMessage;
   }
   return successMessage;
+}
+
+// Property Manager specific response helpers
+export function createPropertyManagerResponse(
+  propertyManager: PropertyManagerResponse,
+  message: string = 'Property manager retrieved successfully.'
+): ApiResponse<PropertyManagerResponse> {
+  return createSuccessResponse(propertyManager, message);
+}
+
+export function createPropertyManagersResponse(
+  propertyManagers: PropertyManagerResponse[],
+  pagination?: MetaData['pagination'],
+  message: string = 'Property managers retrieved successfully.',
+  emptyMessage: string = 'No property managers found.'
+): ApiResponse<PropertyManagerResponse[]> {
+  const finalMessage = getDataMessage(propertyManagers, message, emptyMessage);
+  
+  if (pagination) {
+    return createPaginatedResponse(propertyManagers, pagination, message, emptyMessage);
+  }
+  return createSuccessResponse(propertyManagers, finalMessage);
 }
 
 // Entity-specific success response helpers
@@ -341,10 +364,15 @@ export const createMaintenanceRequestResponse = (
 
 export const createMaintenanceRequestsResponse = (
   data: MaintenanceRequestResponse[],
-  message: string = "Success",
+  pagination?: MetaData['pagination'],
+  message: string = "Maintenance requests retrieved successfully.",
   emptyMessage: string = "No maintenance requests found."
 ): ApiResponse<MaintenanceRequestResponse[]> => {
   const finalMessage = data.length === 0 ? emptyMessage : message;
+  
+  if (pagination) {
+    return createPaginatedResponse(data, pagination, message, emptyMessage);
+  }
   
   return {
     success: true,
