@@ -29,26 +29,36 @@ export const getUnitsServices = async (
   const { propertyId, organizationId, status, isActive, page, limit } = queryParams;
   const offset = (page - 1) * limit;
 
-  // Build where conditions
-  const whereConditions = [];
-  
-  if (propertyId) {
-    whereConditions.push(eq(units.propertyId, propertyId));
-  }
-  
-  if (status) {
-    whereConditions.push(eq(units.status, status));
-  }
-  
-  if (isActive !== undefined) {
-    whereConditions.push(eq(units.isActive, isActive));
-  }
-
-  const whereClause = whereConditions.length > 0 
-    ? and(...whereConditions) 
-    : undefined;
-
   try {
+    // Build where conditions
+    const whereConditions = [];
+    
+    if (propertyId) {
+      // First check if the property exists
+      const property = await db.query.properties.findFirst({
+        where: eq(properties.id, propertyId),
+      });
+      
+      if (!property) {
+        throw new Error('Property not found');
+      }
+      
+      whereConditions.push(eq(units.propertyId, propertyId));
+    }
+    
+    if (status) {
+      whereConditions.push(eq(units.status, status));
+    }
+    
+    if (isActive !== undefined) {
+      whereConditions.push(eq(units.isActive, isActive));
+    }
+
+    const whereClause = whereConditions.length > 0 
+      ? and(...whereConditions) 
+      : undefined;
+
+    // Rest of the function remains the same...
     // Get units with property details
     let unitsQuery = db.query.units.findMany({
       where: whereClause,

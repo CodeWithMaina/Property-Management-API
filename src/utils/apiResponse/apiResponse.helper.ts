@@ -82,33 +82,35 @@ export function createErrorResponse(
   });
 }
 
-// export function createPaginatedResponse<T>(
-//   data: T[],
-//   paginationInfo: MetaData['pagination'],
-//   message: string = 'Data retrieved successfully.'
-// ): ApiResponse<T[]> {
-//   return createResponse<T[]>({
-//     success: true,
-//     message,
-//     data,
-//     meta: { pagination: paginationInfo },
-//   });
-// }
-
 export function createPaginatedResponse<T>(
   data: T[],
   paginationInfo: MetaData['pagination'],
-  message: string = 'Data retrieved successfully.'
+  message: string = 'Data retrieved successfully.',
+  emptyMessage: string = 'No data found.'
 ): ApiResponse<T[]> {
+  const finalMessage = data.length === 0 ? emptyMessage : message;
+  
   return {
     success: true,
-    message,
+    message: finalMessage,
     data,
     errorCode: null,
     errors: null,
     meta: { pagination: paginationInfo },
     timestamp: new Date().toISOString(),
   };
+}
+
+// Helper to determine appropriate message based on data presence
+function getDataMessage<T>(
+  data: T[],
+  successMessage: string,
+  emptyMessage: string
+): string {
+  if (Array.isArray(data)) {
+    return data.length === 0 ? emptyMessage : successMessage;
+  }
+  return successMessage;
 }
 
 // Entity-specific success response helpers
@@ -122,12 +124,15 @@ export function createUserResponse(
 export function createUsersResponse(
   users: UserResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Users retrieved successfully.'
+  message: string = 'Users retrieved successfully.',
+  emptyMessage: string = 'No users found.'
 ): ApiResponse<UserResponse[]> {
+  const finalMessage = getDataMessage(users, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(users, pagination, message);
+    return createPaginatedResponse(users, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(users, message);
+  return createSuccessResponse(users, finalMessage);
 }
 
 export function createPropertyResponse(
@@ -140,12 +145,15 @@ export function createPropertyResponse(
 export function createPropertiesResponse(
   properties: PropertyResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Properties retrieved successfully.'
+  message: string = 'Properties retrieved successfully.',
+  emptyMessage: string = 'No properties found.'
 ): ApiResponse<PropertyResponse[]> {
+  const finalMessage = getDataMessage(properties, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(properties, pagination, message);
+    return createPaginatedResponse(properties, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(properties, message);
+  return createSuccessResponse(properties, finalMessage);
 }
 
 export function createUnitResponse(
@@ -158,14 +166,16 @@ export function createUnitResponse(
 export function createUnitsResponse(
   units: UnitResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Units retrieved successfully.'
+  message: string = 'Units retrieved successfully.',
+  emptyMessage: string = 'No units found.'
 ): ApiResponse<UnitResponse[]> {
+  const finalMessage = getDataMessage(units, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(units, pagination, message);
+    return createPaginatedResponse(units, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(units, message);
+  return createSuccessResponse(units, finalMessage);
 }
-
 
 export function createInvoiceResponse(
   invoice: InvoiceResponse,
@@ -177,12 +187,15 @@ export function createInvoiceResponse(
 export function createInvoicesResponse(
   invoices: InvoiceResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Invoices retrieved successfully.'
+  message: string = 'Invoices retrieved successfully.',
+  emptyMessage: string = 'No invoices found.'
 ): ApiResponse<InvoiceResponse[]> {
+  const finalMessage = getDataMessage(invoices, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(invoices, pagination, message);
+    return createPaginatedResponse(invoices, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(invoices, message);
+  return createSuccessResponse(invoices, finalMessage);
 }
 
 export function createPaymentResponse(
@@ -195,15 +208,16 @@ export function createPaymentResponse(
 export function createPaymentsResponse(
   payments: PaymentResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Payments retrieved successfully.'
+  message: string = 'Payments retrieved successfully.',
+  emptyMessage: string = 'No payments found.'
 ): ApiResponse<PaymentResponse[]> {
+  const finalMessage = getDataMessage(payments, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(payments, pagination, message);
+    return createPaginatedResponse(payments, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(payments, message);
+  return createSuccessResponse(payments, finalMessage);
 }
-
-
 
 export function createActivityLogResponse(
   log: ActivityLogResponse,
@@ -215,15 +229,17 @@ export function createActivityLogResponse(
 export function createActivityLogsResponse(
   logs: ActivityLogResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Activity logs retrieved successfully.'
+  message: string = 'Activity logs retrieved successfully.',
+  emptyMessage: string = 'No activity logs found.'
 ): ApiResponse<ActivityLogResponse[]> {
+  const finalMessage = getDataMessage(logs, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(logs, pagination, message);
+    return createPaginatedResponse(logs, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(logs, message);
+  return createSuccessResponse(logs, finalMessage);
 }
 
-// Add to existing apiResponse.helper.ts
 export function createOrganizationResponse(
   organization: OrganizationResponse,
   message: string = 'Organization retrieved successfully.'
@@ -234,12 +250,15 @@ export function createOrganizationResponse(
 export function createOrganizationsResponse(
   organizations: OrganizationResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Organizations retrieved successfully.'
+  message: string = 'Organizations retrieved successfully.',
+  emptyMessage: string = 'No organizations found.'
 ): ApiResponse<OrganizationResponse[]> {
+  const finalMessage = getDataMessage(organizations, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(organizations, pagination, message);
+    return createPaginatedResponse(organizations, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(organizations, message);
+  return createSuccessResponse(organizations, finalMessage);
 }
 
 export function createUserOrganizationResponse(
@@ -252,12 +271,15 @@ export function createUserOrganizationResponse(
 export function createUserOrganizationsResponse(
   userOrganizations: UserOrganizationResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'User organizations retrieved successfully.'
+  message: string = 'User organizations retrieved successfully.',
+  emptyMessage: string = 'No user organizations found.'
 ): ApiResponse<UserOrganizationResponse[]> {
+  const finalMessage = getDataMessage(userOrganizations, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(userOrganizations, pagination, message);
+    return createPaginatedResponse(userOrganizations, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(userOrganizations, message);
+  return createSuccessResponse(userOrganizations, finalMessage);
 }
 
 export function createLeaseResponse(
@@ -270,14 +292,16 @@ export function createLeaseResponse(
 export function createLeasesResponse(
   leases: LeaseResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Leases retrieved successfully.'
+  message: string = 'Leases retrieved successfully.',
+  emptyMessage: string = 'No leases found.'
 ): ApiResponse<LeaseResponse[]> {
+  const finalMessage = getDataMessage(leases, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(leases, pagination, message);
+    return createPaginatedResponse(leases, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(leases, message);
+  return createSuccessResponse(leases, finalMessage);
 }
-
 
 export function createAmenityResponse(
   amenity: AmenityResponse,
@@ -289,12 +313,15 @@ export function createAmenityResponse(
 export function createAmenitiesResponse(
   amenities: AmenityResponse[],
   pagination?: MetaData['pagination'],
-  message: string = 'Amenities retrieved successfully.'
+  message: string = 'Amenities retrieved successfully.',
+  emptyMessage: string = 'No amenities found.'
 ): ApiResponse<AmenityResponse[]> {
+  const finalMessage = getDataMessage(amenities, message, emptyMessage);
+  
   if (pagination) {
-    return createPaginatedResponse(amenities, pagination, message);
+    return createPaginatedResponse(amenities, pagination, message, emptyMessage);
   }
-  return createSuccessResponse(amenities, message);
+  return createSuccessResponse(amenities, finalMessage);
 }
 
 export const createMaintenanceRequestResponse = (
@@ -314,11 +341,14 @@ export const createMaintenanceRequestResponse = (
 
 export const createMaintenanceRequestsResponse = (
   data: MaintenanceRequestResponse[],
-  message: string = "Success"
+  message: string = "Success",
+  emptyMessage: string = "No maintenance requests found."
 ): ApiResponse<MaintenanceRequestResponse[]> => {
+  const finalMessage = data.length === 0 ? emptyMessage : message;
+  
   return {
     success: true,
-    message,
+    message: finalMessage,
     data,
     errorCode: null,
     errors: null,
