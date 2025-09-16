@@ -339,6 +339,14 @@ export function createAmenitiesResponse(
   message: string = 'Amenities retrieved successfully.',
   emptyMessage: string = 'No amenities found.'
 ): ApiResponse<AmenityResponse[]> {
+  // Handle empty array case
+  if (amenities.length === 0) {
+    if (pagination) {
+      return createPaginatedResponse(amenities, pagination, emptyMessage, emptyMessage);
+    }
+    return createSuccessResponse(amenities, emptyMessage);
+  }
+  
   const finalMessage = getDataMessage(amenities, message, emptyMessage);
   
   if (pagination) {

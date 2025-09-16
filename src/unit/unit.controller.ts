@@ -28,6 +28,7 @@ import {
   createPaginatedResponse,
   createUnitResponse,
   createUnitsResponse,
+  createAmenitiesResponse,
 } from "../utils/apiResponse/apiResponse.helper";
 
 /**
@@ -196,9 +197,12 @@ export const getUnitAmenities = asyncHandler(
     const amenities = await getUnitAmenitiesServices(unitId);
     console.log("Retrieved amenities:", amenities);
 
-    const response = createSuccessResponse(
+    // Use createAmenitiesResponse which handles empty arrays properly
+    const response = createAmenitiesResponse(
       amenities,
-      "Unit amenities retrieved successfully"
+      undefined, // no pagination
+      "Unit amenities retrieved successfully",
+      "No amenities found for this unit"
     );
 
     res.status(200).json(response);
