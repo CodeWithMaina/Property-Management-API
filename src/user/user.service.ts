@@ -1,5 +1,5 @@
 // user.service.ts
-import { and, count, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, inArray, like, or, sql } from "drizzle-orm";
 import db from "../drizzle/db";
 import {
   users,
@@ -10,6 +10,7 @@ import {
   UserRoleEnum,
   User,
   UserOrganization,
+  invites,
 } from "../drizzle/schema";
 import {
   CreateUserInput,
@@ -39,7 +40,14 @@ export const getUsersService = async (
   filters: UserFilters
 ): Promise<PaginatedUsers> => {
   try {
-    const { isActive, search, role, organizationId, page = 1, limit = 20 } = filters;
+    const {
+      isActive,
+      search,
+      role,
+      organizationId,
+      page = 1,
+      limit = 20,
+    } = filters;
     const offset = (page - 1) * limit;
 
     // Build where conditions
@@ -65,7 +73,7 @@ export const getUsersService = async (
         .select({ userId: userOrganizations.userId })
         .from(userOrganizations)
         .where(eq(userOrganizations.role, role));
-      
+
       conditions.push(inArray(users.id, usersWithRole));
     }
 
@@ -75,7 +83,7 @@ export const getUsersService = async (
         .select({ userId: userOrganizations.userId })
         .from(userOrganizations)
         .where(eq(userOrganizations.organizationId, organizationId));
-      
+
       conditions.push(inArray(users.id, usersInOrganization));
     }
 
@@ -447,9 +455,10 @@ export const inviteUserService = async (
   actorUserId?: string
 ): Promise<{ inviteToken: string; expiresAt: Date }> => {
   try {
-    const { email, organizationId, role } = inviteData;
+    const { email, organizationId, role, invitedBy } = inviteData;
 
-    const userRole = role as UserRoleEnum;
+    // Use invitedBy from the data or fallback to actorUserId
+    const invitedByUserId = invitedBy || actorUserId;
 
     // Check if organization exists
     const organization = await db.query.organizations.findFirst({
@@ -457,7 +466,7 @@ export const inviteUserService = async (
     });
 
     if (!organization) {
-      throw new NotFoundError("Organization");
+      throw new NotFoundError("The Organization was not found");
     }
 
     // Check if user already exists
@@ -477,20 +486,25 @@ export const inviteUserService = async (
         );
       }
 
+      // Generate invite token + expiry here BEFORE using them
+      const inviteToken = uuidv4();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
       // Add user to organization
-      await db.insert(userOrganizations).values({
-        userId: existingUser.id,
+      await db.insert(invites).values({
+        email,
         organizationId,
-        role: userRole,
-        isPrimary: false,
+        role: role as UserRoleEnum,
+        invitedByUserId, // Use the resolved value
+        token: inviteToken,
+        expiresAt,
         createdAt: new Date(),
       });
 
       // TODO: Send notification email to existing user
-
       return {
-        inviteToken: "existing_user",
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+        inviteToken,
+        expiresAt,
       };
     }
 
@@ -498,9 +512,16 @@ export const inviteUserService = async (
     const inviteToken = uuidv4();
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Store invite in database (you'll need to create an invites table)
-    // For now, we'll just return the token
-    // TODO: Implement proper invite storage and email sending
+    // Store invite in database
+    await db.insert(invites).values({
+      email,
+      organizationId,
+      role: role as UserRoleEnum,
+      invitedByUserId: invitedBy || actorUserId, // Use provided invitedBy or fallback to actor
+      token: inviteToken,
+      expiresAt,
+      createdAt: new Date(),
+    });
 
     // Log activity
     if (actorUserId) {
@@ -515,6 +536,7 @@ export const inviteUserService = async (
     }
 
     // TODO: Send invitation email with token
+    console.log(`Invitation token for ${email}: ${inviteToken}`);
 
     return {
       inviteToken,
@@ -535,10 +557,27 @@ export const acceptInviteService = async (
   userData: AcceptInviteInput
 ): Promise<UserResponse> => {
   try {
-    // TODO: Validate token and get invitation details from database
-    // For now, we'll just create the user
+    // Validate token and get invitation
+    const invite = await db.query.invites.findFirst({
+      where: and(
+        eq(invites.token, token),
+        eq(invites.isUsed, false),
+        gt(invites.expiresAt, new Date())
+      ),
+      with: {
+        organization: true,
+      },
+    });
 
-    // Check if user already exists
+    if (!invite) {
+      throw new ValidationError("Invalid or expired invitation token");
+    }
+
+    if (invite.email !== userData.email) {
+      throw new ValidationError("Email does not match invitation");
+    }
+
+    // Check if user already exists (double-check)
     const existingUser = await getUserByEmailService(userData.email);
     if (existingUser) {
       throw new ConflictError("User with this email already exists");
@@ -564,12 +603,25 @@ export const acceptInviteService = async (
       isEmailVerified: true,
     });
 
-    // TODO: Add user to organization based on invitation
-    // For now, we'll just return the user
+    // Add user to organization
+    await db.insert(userOrganizations).values({
+      userId: newUser.id,
+      organizationId: invite.organizationId,
+      role: invite.role,
+      isPrimary: false,
+      createdAt: new Date(),
+    });
+
+    // Mark invite as used
+    await db
+      .update(invites)
+      .set({ isUsed: true, usedAt: new Date() })
+      .where(eq(invites.token, token));
 
     return newUser;
   } catch (error) {
-    if (error instanceof ConflictError) throw error;
+    if (error instanceof ConflictError || error instanceof ValidationError)
+      throw error;
     throw new DatabaseError("Failed to accept invitation");
   }
 };

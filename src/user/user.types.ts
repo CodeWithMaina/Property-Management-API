@@ -59,6 +59,7 @@ export interface InviteUserInput {
   email: string;
   organizationId: string;
   role: UserRoleEnum;
+  invitedBy?: string;
 }
 
 export interface AcceptInviteInput {

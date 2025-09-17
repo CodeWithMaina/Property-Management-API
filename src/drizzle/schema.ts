@@ -144,6 +144,34 @@ export const refreshTokens = pgTable(
     index("refreshTokens_expiresAt_index").on(t.expiresAt),
     index("refreshTokens_isRevoked_index").on(t.isRevoked),
   ]
+
+);
+
+
+export const invites = pgTable(
+  "invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: varchar("email", { length: 320 }).notNull(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    role: userRoleEnum("role").notNull(),
+    invitedByUserId: uuid("invitedByUserId")
+      .references(() => users.id, { onDelete: "set null" }),
+    token: varchar("token", { length: 255 }).notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    isUsed: boolean("isUsed").notNull().default(false),
+    usedAt: timestamp("usedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("invites_token_unique").on(t.token),
+    index("invites_email_index").on(t.email),
+    index("invites_organizationId_index").on(t.organizationId),
+    index("invites_expiresAt_index").on(t.expiresAt),
+    index("invites_isUsed_index").on(t.isUsed),
+  ]
 );
 
 // ---------- Core: Users & Organizations ----------
@@ -808,6 +836,17 @@ export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   }),
 }));
 
+export const invitesRelations = relations(invites, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [invites.organizationId],
+    references: [organizations.id],
+  }),
+  invitedBy: one(users, {
+    fields: [invites.invitedByUserId],
+    references: [users.id],
+  }),
+}));
+
 // ---------- Inferred Types ----------
 export type UserAuth = typeof userAuth.$inferSelect;
 export type NewUserAuth = typeof userAuth.$inferInsert;
@@ -868,6 +907,9 @@ export type NewMaintenanceAttachment = typeof maintenanceAttachments.$inferInser
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
+
+export type Invite = typeof invites.$inferSelect;
+export type NewInvite = typeof invites.$inferInsert;
 
 export type UserRoleEnum = (typeof userRoleEnum.enumValues)[number];
 export type ActivityActionEnum = (typeof activityActionEnum.enumValues)[number];

@@ -41,6 +41,7 @@ export const InviteUserSchema = z.object({
   email: z.string().email("Invalid email format").max(320),
   organizationId: z.string().uuid("Invalid organization ID"),
   role: z.enum(userRoleEnum.enumValues),
+  invitedBy: z.string().uuid("Invalid user ID").optional().nullable().transform(val => val ?? undefined),
 });
 
 export const AcceptInviteSchema = z.object({
@@ -48,6 +49,10 @@ export const AcceptInviteSchema = z.object({
   email: z.string().email("Invalid email format").max(320),
   phone: z.string().max(64).optional().nullable().transform(val => val ?? undefined),
   password: z.string().min(8, "Password must be at least 8 characters"),
+  confirmPassword: z.string().min(8, "Confirm password is required"),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
 });
 
 export type CreateUserInput = z.infer<typeof CreateUserSchema>;
