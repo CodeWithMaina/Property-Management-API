@@ -4,12 +4,13 @@ import cors from "cors";
 import { propertyRouter } from "./property/property.route";
 import { unitRouter } from "./unit/unit.route";
 import { userRouter } from "./user/user.route";
-import organizationRouter from "./organization/organization.route";
+import {organizationRouter} from "./organization/organization.route";
 import leaseRouter from "./lease/lease.route";
 import amenitiesRouter from "./amenity/amenity.route";
 import invoiceRoutes from "./invoice/invoice.route";
 import { errorHandler, notFoundHandler } from "./utils/errorHandler";
 import {propertyManagerRouter} from "./propertyManager/propertyManager.route";
+import { userOrganizationRouter } from "./userOrganization/userOrganization.route";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api', leaseRouter)
 app.use('/api', amenitiesRouter)
 app.use('/api', userRouter)
 app.use('/api', organizationRouter)
+app.use('/api', userOrganizationRouter)
 app.use('/api', invoiceRoutes)
 
 // Health check route
