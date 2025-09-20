@@ -9,6 +9,8 @@ import {
   addUnitAmenityServices,
   removeUnitAmenityServices,
   updateUnitStatusServices,
+  getCurrentTenantFromUnit,
+  getCurrentLeaseFromUnit,
 } from "./unit.service";
 import {
   UnitSchema,
@@ -87,7 +89,20 @@ export const getUnitById = asyncHandler(
       throw new NotFoundError("Unit");
     }
 
-    const response = createUnitResponse(unit, "Unit retrieved successfully");
+    // Add current tenant info to the response
+    const currentTenant = getCurrentTenantFromUnit(unit);
+    const currentLease = getCurrentLeaseFromUnit(unit);
+    
+    const unitWithTenant = {
+      ...unit,
+      currentTenant,
+      currentLease
+    };
+
+    const response = createSuccessResponse(
+      unitWithTenant,
+      "Unit retrieved successfully"
+    );
 
     res.status(200).json(response);
   }

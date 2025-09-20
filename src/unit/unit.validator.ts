@@ -33,11 +33,13 @@ export const PartialUnitSchema = UnitSchema.partial();
 export const UnitQuerySchema = z.object({
   propertyId: z.string().uuid("Property ID must be a valid UUID").optional(),
   organizationId: z.string().uuid("Organization ID must be a valid UUID").optional(),
+  propertyManagerId: z.string().uuid("Property Manager ID must be a valid UUID").optional(),
   status: z.enum(["vacant", "reserved", "occupied", "unavailable"] as const).optional(),
   isActive: preprocessQueryParam(z.boolean().optional()),
   page: preprocessQueryParam(z.number().int().min(1, "Page must be at least 1").default(1)),
   limit: preprocessQueryParam(z.number().int().min(1, "Limit must be at least 1").max(100, "Limit cannot exceed 100").default(20)),
 });
+
 
 // Create a type-safe version for the parsed query parameters
 export const ParsedUnitQuerySchema = z.object({

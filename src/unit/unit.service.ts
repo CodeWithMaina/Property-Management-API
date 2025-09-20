@@ -9,7 +9,12 @@ import {
   organizations,
   users,
   UnitStatusEnum,
-  leases
+  leases,
+  Property,
+  PropertyManager,
+  Organization,
+  User,
+  Lease
 } from "../drizzle/schema";
 import { 
   UnitInput, 
@@ -19,14 +24,17 @@ import {
   UnitStatusChangeInput
 } from "./unit.validator";
 import { NotFoundError, ConflictError, ValidationError, DatabaseError, PropertyNotFoundError } from "../utils/errorHandler";
+import { UnitWithRelations } from "./unit.types";
 
 /**
  * Get all units with optional filtering and pagination
  */
+
+
 export const getUnitsServices = async (
   queryParams: UnitQueryParams
-): Promise<{ units: Unit[]; total: number }> => {
-  const { propertyId, organizationId, status, isActive, page, limit } = queryParams;
+): Promise<{ units: UnitWithRelations[]; total: number }> => {
+  const { propertyId, organizationId, propertyManagerId, status, isActive, page, limit } = queryParams;
   const offset = (page - 1) * limit;
 
   try {
@@ -34,7 +42,6 @@ export const getUnitsServices = async (
     const whereConditions = [];
     
     if (propertyId) {
-      // First check if the property exists
       const property = await db.query.properties.findFirst({
         where: eq(properties.id, propertyId),
       });
@@ -58,9 +65,8 @@ export const getUnitsServices = async (
       ? and(...whereConditions) 
       : undefined;
 
-    // Rest of the function remains the same...
-    // Get units with property details
-    let unitsQuery = db.query.units.findMany({
+    // Get units with all relations
+    const unitsList = await db.query.units.findMany({
       where: whereClause,
       with: {
         property: {
@@ -75,6 +81,17 @@ export const getUnitsServices = async (
                 id: true,
                 name: true,
               }
+            },
+            propertyManagers: {
+              with: {
+                user: {
+                  columns: {
+                    id: true,
+                    fullName: true,
+                    email: true,
+                  }
+                }
+              }
             }
           }
         },
@@ -88,6 +105,27 @@ export const getUnitsServices = async (
               }
             }
           }
+        },
+        leases: {
+          where: (leases, { inArray }) => inArray(leases.status, ["active", "pendingMoveIn"]),
+          columns: {
+            id: true,
+            status: true,
+            startDate: true,
+            endDate: true,
+            rentAmount: true,
+          },
+          with: {
+            tenant: {
+              columns: {
+                id: true,
+                fullName: true,
+                email: true,
+              }
+            }
+          },
+          orderBy: [desc(leases.startDate)],
+          limit: 1,
         }
       },
       orderBy: [desc(units.createdAt)],
@@ -95,62 +133,90 @@ export const getUnitsServices = async (
       offset: offset,
     });
 
+    // Type assertion to handle the complex nested types
+    const typedUnits = unitsList as unknown as UnitWithRelations[];
+
     // Apply organization filter if provided
+    let filteredUnits = typedUnits;
     if (organizationId) {
-      const unitsList = await unitsQuery;
-      const filteredUnits = unitsList.filter(
+      filteredUnits = filteredUnits.filter(
         unit => unit.property.organizationId === organizationId
       );
-      
-      // Get total count for pagination
-      const allUnits = await db.query.units.findMany({
+    }
+    
+    // Apply property manager filter if provided
+    if (propertyManagerId) {
+      filteredUnits = filteredUnits.filter(
+        unit => unit.property.propertyManagers.some(
+          manager => manager.user.id === propertyManagerId
+        )
+      );
+    }
+    
+    // Get total count for pagination (simpler query without complex relations)
+    const totalQuery = db.select({ count: sql<number>`count(*)` })
+      .from(units)
+      .where(whereClause || sql`1=1`);
+    
+    const totalResult = await totalQuery;
+    const total = totalResult[0]?.count || 0;
+
+    // For organization and property manager filtering, we need to handle counts separately
+    let finalTotal = total;
+    
+    if (organizationId || propertyManagerId) {
+      // Get all units with minimal relations for counting
+      const allUnitsForCount = await db.query.units.findMany({
         where: whereClause,
         with: {
           property: {
             columns: {
               organizationId: true,
+            },
+            with: {
+              propertyManagers: {
+                columns: {
+                  userId: true,
+                }
+              }
             }
           }
         }
       });
+
+      let filteredCount = allUnitsForCount;
       
-      const total = allUnits.filter(
-        unit => unit.property.organizationId === organizationId
-      ).length;
-
-      return {
-        units: filteredUnits,
-        total,
-      };
-    } else {
-      const unitsList = await unitsQuery;
-
-      // Get total count for pagination
-      const totalResult = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(units)
-        .where(whereClause || sql`1=1`);
-
-      const total = totalResult[0]?.count || 0;
-
-      return {
-        units: unitsList,
-        total,
-      };
+      if (organizationId) {
+        filteredCount = filteredCount.filter(
+          unit => unit.property.organizationId === organizationId
+        );
+      }
+      
+      if (propertyManagerId) {
+        filteredCount = filteredCount.filter(
+          unit => unit.property.propertyManagers.some(
+            manager => manager.userId === propertyManagerId
+          )
+        );
+      }
+      
+      finalTotal = filteredCount.length;
     }
+
+    return {
+      units: filteredUnits,
+      total: finalTotal,
+    };
   } catch (error) {
     console.error('Error in getUnitsServices:', error);
     throw error;
   }
 };
 
-/**
- * Get unit by ID with detailed information
- */
 export const getUnitByIdServices = async (
   unitId: string
-): Promise<Unit | undefined> => {
-  return await db.query.units.findFirst({
+): Promise<UnitWithRelations | undefined> => {
+  const unit = await db.query.units.findFirst({
     where: eq(units.id, unitId),
     with: {
       property: {
@@ -178,6 +244,8 @@ export const getUnitByIdServices = async (
                   id: true,
                   fullName: true,
                   email: true,
+                  phone: true,
+                  avatarUrl: true,
                 }
               }
             }
@@ -203,6 +271,9 @@ export const getUnitByIdServices = async (
           startDate: true,
           endDate: true,
           rentAmount: true,
+          depositAmount: true,
+          dueDayOfMonth: true,
+          billingCurrency: true,
         },
         with: {
           tenant: {
@@ -211,13 +282,52 @@ export const getUnitByIdServices = async (
               fullName: true,
               email: true,
               phone: true,
+              avatarUrl: true,
             }
           }
-        }
+        },
+        orderBy: [desc(leases.startDate)],
+        limit: 1,
       }
     }
   });
+
+  return unit as unknown as UnitWithRelations;
 };
+
+// Update helper functions with proper typing
+export const getCurrentTenantFromUnit = (unit: UnitWithRelations) => {
+  if (!unit.leases || unit.leases.length === 0) {
+    return null;
+  }
+  
+  const currentLease = unit.leases[0];
+  
+  if (!currentLease.tenant) {
+    return null;
+  }
+  
+  return {
+    ...currentLease.tenant,
+    leaseInfo: {
+      id: currentLease.id,
+      status: currentLease.status,
+      startDate: currentLease.startDate,
+      endDate: currentLease.endDate,
+      rentAmount: currentLease.rentAmount,
+    }
+  };
+};
+
+export const getCurrentLeaseFromUnit = (unit: UnitWithRelations) => {
+  if (!unit.leases || unit.leases.length === 0) {
+    return null;
+  }
+  
+  return unit.leases[0];
+};
+
+
 
 /**
  * Create a new unit
