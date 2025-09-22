@@ -11,6 +11,7 @@ import invoiceRoutes from "./invoice/invoice.route";
 import { errorHandler, notFoundHandler } from "./utils/errorHandler";
 import {propertyManagerRouter} from "./propertyManager/propertyManager.route";
 import { userOrganizationRouter } from "./userOrganization/userOrganization.route";
+import unitAnalyticsRouter from "./unit/unitAnalytics.route";
 
 dotenv.config();
 
@@ -38,6 +39,7 @@ app.use('/api', unitRouter)
 app.use('/api', leaseRouter)
 app.use('/api', amenitiesRouter)
 app.use('/api', userRouter)
+app.use('/api', unitAnalyticsRouter)
 app.use('/api', organizationRouter)
 app.use('/api', userOrganizationRouter)
 app.use('/api', invoiceRoutes)

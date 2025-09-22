@@ -1,4 +1,4 @@
-import { Amenity, Lease, LeaseStatusEnum, Organization, Property, PropertyManager, Unit, UnitAmenity, User } from "../drizzle/schema";
+import { Amenity, Lease, LeaseStatusEnum, Organization, Property, PropertyManager, Unit, UnitAmenity, UnitStatusEnum, User } from "../drizzle/schema";
 
 export type SimpleUser = Pick<User, 'id' | 'fullName' | 'email' | 'phone' | 'avatarUrl'>;
 export type SimpleProperty = Pick<Property, 'id' | 'name' | 'organizationId'>;
@@ -33,4 +33,41 @@ export interface CurrentTenantInfo {
     endDate?: Date;
     rentAmount: string;
   };
+}
+
+export interface UnitStats {
+  total: number;
+  active: number;
+  inactive: number;
+  byStatus: Record<UnitStatusEnum, number>;
+  byBedrooms: Record<number, number>;
+  byBathrooms: Record<number, number>;
+  occupancyRate: number;
+  totalRevenuePotential: number;
+  averageRent: number;
+}
+
+export interface PropertyStats {
+  propertyId: string;
+  propertyName: string;
+  unitCount: number;
+  occupiedCount: number;
+  vacantCount: number;
+  revenuePotential: number;
+  occupancyRate: number;
+}
+
+export interface TimeSeriesData {
+  date: string;
+  occupied: number;
+  vacant: number;
+  reserved: number;
+  unavailable: number;
+}
+
+export interface AnalyticsFilters {
+  organizationId?: string;
+  propertyId?: string;
+  startDate?: Date;
+  endDate?: Date;
 }
