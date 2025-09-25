@@ -64,7 +64,13 @@ export const addUserToOrganizationServices = async (
     }
 
     const result = await db.insert(userOrganizations)
-      .values(userOrgData)
+      .values({
+        userId: userOrgData.userId,
+        organizationId: userOrgData.organizationId,
+        role: userOrgData.role,
+        isPrimary: userOrgData.isPrimary,
+        permissions: userOrgData.permissions || {}, // Add permissions field
+      })
       .returning();
     
     return result[0];
@@ -81,7 +87,8 @@ export const updateUserRoleServices = async (
   try {
     const result = await db.update(userOrganizations)
       .set({ 
-        role: roleData.role
+        role: roleData.role,
+        updatedAt: new Date(),
       })
       .where(eq(userOrganizations.id, userOrganizationId))
       .returning();
@@ -102,22 +109,25 @@ export const setPrimaryOrganizationServices = async (
   primaryData: PrimaryOrganizationInput
 ) => {
   try {
-    if (primaryData.isPrimary) {
-      const userOrg = await db.query.userOrganizations.findFirst({
-        where: eq(userOrganizations.id, userOrganizationId),
-        columns: { userId: true }
-      });
+    const userOrg = await db.query.userOrganizations.findFirst({
+      where: eq(userOrganizations.id, userOrganizationId),
+      columns: { userId: true }
+    });
 
-      if (userOrg) {
-        await db.update(userOrganizations)
-          .set({ isPrimary: false })
-          .where(eq(userOrganizations.userId, userOrg.userId));
-      }
+    if (!userOrg) {
+      throw new Error("User organization membership not found");
+    }
+
+    if (primaryData.isPrimary) {
+      await db.update(userOrganizations)
+        .set({ isPrimary: false })
+        .where(eq(userOrganizations.userId, userOrg.userId));
     }
 
     const result = await db.update(userOrganizations)
       .set({ 
         isPrimary: primaryData.isPrimary,
+        updatedAt: new Date(),
       })
       .where(eq(userOrganizations.id, userOrganizationId))
       .returning();

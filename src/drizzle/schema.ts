@@ -77,7 +77,12 @@ export const maintenanceStatusEnum = pgEnum("maintenanceStatusEnum", [
   "cancelled",
 ]);
 
-export const priorityEnum = pgEnum("priorityEnum", ["low", "medium", "high", "urgent"]);
+export const priorityEnum = pgEnum("priorityEnum", [
+  "low",
+  "medium",
+  "high",
+  "urgent",
+]);
 
 export const activityActionEnum = pgEnum("activityActionEnum", [
   "create",
@@ -106,8 +111,12 @@ export const userAuth = pgTable(
     lastLoginAt: timestamp("lastLoginAt", { withTimezone: true }),
     verificationToken: varchar("verificationToken", { length: 255 }),
     resetToken: varchar("resetToken", { length: 255 }),
-    resetTokenExpiresAt: timestamp("resetTokenExpiresAt", { withTimezone: true }),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    resetTokenExpiresAt: timestamp("resetTokenExpiresAt", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -135,7 +144,9 @@ export const refreshTokens = pgTable(
     expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
     isRevoked: boolean("isRevoked").notNull().default(false),
     revokedAt: timestamp("revokedAt", { withTimezone: true }),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("refreshTokens_token_unique").on(t.token),
@@ -144,9 +155,7 @@ export const refreshTokens = pgTable(
     index("refreshTokens_expiresAt_index").on(t.expiresAt),
     index("refreshTokens_isRevoked_index").on(t.isRevoked),
   ]
-
 );
-
 
 export const invites = pgTable(
   "invites",
@@ -157,13 +166,16 @@ export const invites = pgTable(
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: userRoleEnum("role").notNull(),
-    invitedByUserId: uuid("invitedByUserId")
-      .references(() => users.id, { onDelete: "set null" }),
+    invitedByUserId: uuid("invitedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
     token: varchar("token", { length: 255 }).notNull(),
     expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
     isUsed: boolean("isUsed").notNull().default(false),
     usedAt: timestamp("usedAt", { withTimezone: true }),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("invites_token_unique").on(t.token),
@@ -185,7 +197,9 @@ export const users = pgTable(
     isActive: boolean("isActive").notNull().default(true),
     avatarUrl: varchar("avatarUrl", { length: 1024 }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -206,15 +220,15 @@ export const organizations = pgTable(
     taxId: varchar("taxId", { length: 64 }),
     isActive: boolean("isActive").notNull().default(true),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
-  (t) => [
-    uniqueIndex("organizations_name_unique").on(t.name),
-  ]
+  (t) => [uniqueIndex("organizations_name_unique").on(t.name)]
 );
 
 export const userOrganizations = pgTable(
@@ -229,7 +243,27 @@ export const userOrganizations = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     role: userRoleEnum("role").notNull().default("tenant"),
     isPrimary: boolean("isPrimary").notNull().default(false),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    // ADD: Permissions specific to manager role
+    permissions: jsonb("permissions")
+      .$type<{
+        canManageProperties?: boolean;
+        canManageUnits?: boolean;
+        canManageLeases?: boolean;
+        canManageTenants?: boolean;
+        canManageInvoices?: boolean;
+        canManagePayments?: boolean;
+        canManageMaintenance?: boolean;
+        canManageUsers?: boolean;
+        canViewReports?: boolean;
+      }>()
+      .default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()), // ADD: UpdatedAt for permission changes
   },
   (t) => [
     uniqueIndex("userOrganizations_userId_organizationId_unique").on(
@@ -237,6 +271,44 @@ export const userOrganizations = pgTable(
       t.organizationId
     ),
     index("userOrganizations_role_index").on(t.role),
+    index("userOrganizations_isPrimary_index").on(t.isPrimary), // ADD: Index for primary org lookup
+  ]
+);
+
+// ADD: Organization settings table for manager-specific configurations
+export const organizationSettings = pgTable(
+  "organizationSettings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organizationId")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // Manager-specific settings
+    managerCanCreateProperties: boolean("managerCanCreateProperties")
+      .notNull()
+      .default(true),
+    managerCanDeleteProperties: boolean("managerCanDeleteProperties")
+      .notNull()
+      .default(false),
+    managerCanInviteUsers: boolean("managerCanInviteUsers")
+      .notNull()
+      .default(true),
+    managerMaxProperties: integer("managerMaxProperties"), // Limit properties a manager can create
+    managerPermissions: jsonb("managerPermissions")
+      .$type<Record<string, unknown>>()
+      .default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("organizationSettings_organizationId_unique").on(
+      t.organizationId
+    ),
   ]
 );
 
@@ -258,8 +330,14 @@ export const properties = pgTable(
     country: varchar("country", { length: 128 }),
     timezone: varchar("timezone", { length: 64 }),
     isActive: boolean("isActive").notNull().default(true),
+    // ADD: Created by field to track which manager created the property
+    createdByUserId: uuid("createdByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -271,6 +349,7 @@ export const properties = pgTable(
       t.name
     ),
     index("properties_organizationId_index").on(t.organizationId),
+    index("properties_createdByUserId_index").on(t.createdByUserId), // ADD: Index for manager lookup
   ]
 );
 
@@ -285,13 +364,29 @@ export const propertyManagers = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     role: userRoleEnum("role").notNull().default("manager"), // manager/caretaker/admin
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    // ADD: Manager-specific permissions for this property
+    permissions: jsonb("permissions")
+      .$type<{
+        canManageUnits?: boolean;
+        canManageLeases?: boolean;
+        canManageMaintenance?: boolean;
+        canViewFinancials?: boolean;
+      }>()
+      .default({}),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
   },
   (t) => [
     uniqueIndex("propertyManagers_propertyId_userId_unique").on(
       t.propertyId,
       t.userId
     ),
+    index("propertyManagers_userId_index").on(t.userId), // ADD: Index for user lookup
   ]
 );
 
@@ -307,21 +402,22 @@ export const units = pgTable(
     bedrooms: integer("bedrooms").notNull().default(0),
     bathrooms: integer("bathrooms").notNull().default(0),
     sizeSqm: numeric("sizeSqm", { precision: 10, scale: 2 }),
-    baseRent: numeric("baseRent", { precision: 12, scale: 2 }).notNull().default("0"),
+    baseRent: numeric("baseRent", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
     status: unitStatusEnum("status").notNull().default("vacant"),
     isActive: boolean("isActive").notNull().default(true),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    uniqueIndex("units_propertyId_code_unique").on(
-      t.propertyId,
-      t.code
-    ),
+    uniqueIndex("units_propertyId_code_unique").on(t.propertyId, t.code),
     index("units_propertyId_index").on(t.propertyId),
     index("units_status_index").on(t.status),
   ]
@@ -336,7 +432,9 @@ export const amenities = pgTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 128 }).notNull(),
     description: text("description"),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("amenities_organizationId_name_unique").on(
@@ -356,8 +454,12 @@ export const unitAmenities = pgTable(
     amenityId: uuid("amenityId")
       .notNull()
       .references(() => amenities.id, { onDelete: "cascade" }),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
+
   (t) => [
     uniqueIndex("unitAmenities_unitId_amenityId_unique").on(
       t.unitId,
@@ -387,13 +489,22 @@ export const leases = pgTable(
     startDate: timestamp("startDate", { withTimezone: true }).notNull(),
     endDate: timestamp("endDate", { withTimezone: true }),
     rentAmount: numeric("rentAmount", { precision: 12, scale: 2 }).notNull(),
-    depositAmount: numeric("depositAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    depositAmount: numeric("depositAmount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
     dueDayOfMonth: integer("dueDayOfMonth").notNull().default(1), // 1..28
-    billingCurrency: varchar("billingCurrency", { length: 3 }).notNull().default("KES"),
-    lateFeePercent: numeric("lateFeePercent", { precision: 5, scale: 2 }).default("0"),
+    billingCurrency: varchar("billingCurrency", { length: 3 })
+      .notNull()
+      .default("KES"),
+    lateFeePercent: numeric("lateFeePercent", {
+      precision: 5,
+      scale: 2,
+    }).default("0"),
     notes: text("notes"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -419,16 +530,28 @@ export const invoices = pgTable(
       .references(() => leases.id, { onDelete: "cascade" }),
     invoiceNumber: varchar("invoiceNumber", { length: 64 }).notNull(),
     status: invoiceStatusEnum("status").notNull().default("issued"),
-    issueDate: timestamp("issueDate", { withTimezone: true }).notNull().defaultNow(),
+    issueDate: timestamp("issueDate", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     dueDate: timestamp("dueDate", { withTimezone: true }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("KES"),
-    subtotalAmount: numeric("subtotalAmount", { precision: 12, scale: 2 }).notNull().default("0"),
-    taxAmount: numeric("taxAmount", { precision: 12, scale: 2 }).notNull().default("0"),
-    totalAmount: numeric("totalAmount", { precision: 12, scale: 2 }).notNull().default("0"),
-    balanceAmount: numeric("balanceAmount", { precision: 12, scale: 2 }).notNull().default("0"),
+    subtotalAmount: numeric("subtotalAmount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    taxAmount: numeric("taxAmount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    totalAmount: numeric("totalAmount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    balanceAmount: numeric("balanceAmount", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
     notes: text("notes"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -453,14 +576,18 @@ export const invoiceItems = pgTable(
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
     description: varchar("description", { length: 256 }).notNull(),
-    quantity: numeric("quantity", { precision: 12, scale: 2 }).notNull().default("1"),
-    unitPrice: numeric("unitPrice", { precision: 12, scale: 2 }).notNull().default("0"),
-    lineTotal: numeric("lineTotal", { precision: 12, scale: 2 }).notNull().default("0"),
+    quantity: numeric("quantity", { precision: 12, scale: 2 })
+      .notNull()
+      .default("1"),
+    unitPrice: numeric("unitPrice", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
+    lineTotal: numeric("lineTotal", { precision: 12, scale: 2 })
+      .notNull()
+      .default("0"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
   },
-  (t) => [
-    index("invoiceItems_invoiceId_index").on(t.invoiceId),
-  ]
+  (t) => [index("invoiceItems_invoiceId_index").on(t.invoiceId)]
 );
 
 export const payments = pgTable(
@@ -470,21 +597,28 @@ export const payments = pgTable(
     organizationId: uuid("organizationId")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
-    leaseId: uuid("leaseId")
-      .references(() => leases.id, { onDelete: "set null" }),
-    receivedFromUserId: uuid("receivedFromUserId")
-      .references(() => users.id, { onDelete: "set null" }), // usually tenant
-    receivedByUserId: uuid("receivedByUserId")
-      .references(() => users.id, { onDelete: "set null" }), // staff
+    leaseId: uuid("leaseId").references(() => leases.id, {
+      onDelete: "set null",
+    }),
+    receivedFromUserId: uuid("receivedFromUserId").references(() => users.id, {
+      onDelete: "set null",
+    }), // usually tenant
+    receivedByUserId: uuid("receivedByUserId").references(() => users.id, {
+      onDelete: "set null",
+    }), // staff
     method: paymentMethodEnum("method").notNull().default("cash"),
     status: paymentStatusEnum("status").notNull().default("completed"),
     amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
     currency: varchar("currency", { length: 3 }).notNull().default("KES"),
     referenceCode: varchar("referenceCode", { length: 128 }), // e.g., Mpesa code / cheque no.
     narrative: varchar("narrative", { length: 512 }),
-    receivedAt: timestamp("receivedAt", { withTimezone: true }).notNull().defaultNow(),
+    receivedAt: timestamp("receivedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -510,8 +644,13 @@ export const paymentAllocations = pgTable(
     invoiceId: uuid("invoiceId")
       .notNull()
       .references(() => invoices.id, { onDelete: "cascade" }),
-    amountApplied: numeric("amountApplied", { precision: 12, scale: 2 }).notNull(),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    amountApplied: numeric("amountApplied", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("paymentAllocations_paymentId_invoiceId_unique").on(
@@ -534,8 +673,12 @@ export const receipts = pgTable(
       .notNull()
       .references(() => payments.id, { onDelete: "cascade" }),
     receiptNumber: varchar("receiptNumber", { length: 64 }).notNull(),
-    issuedAt: timestamp("issuedAt", { withTimezone: true }).notNull().defaultNow(),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    issuedAt: timestamp("issuedAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     uniqueIndex("receipts_organizationId_receiptNumber_unique").on(
@@ -557,13 +700,13 @@ export const maintenanceRequests = pgTable(
     propertyId: uuid("propertyId")
       .notNull()
       .references(() => properties.id, { onDelete: "cascade" }),
-    unitId: uuid("unitId")
-      .references(() => units.id, { onDelete: "set null" }),
+    unitId: uuid("unitId").references(() => units.id, { onDelete: "set null" }),
     createdByUserId: uuid("createdByUserId")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    assignedToUserId: uuid("assignedToUserId")
-      .references(() => users.id, { onDelete: "set null" }),
+    assignedToUserId: uuid("assignedToUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
     title: varchar("title", { length: 256 }).notNull(),
     description: text("description"),
     status: maintenanceStatusEnum("status").notNull().default("open"),
@@ -572,7 +715,9 @@ export const maintenanceRequests = pgTable(
     resolvedAt: timestamp("resolvedAt", { withTimezone: true }),
     costAmount: numeric("costAmount", { precision: 12, scale: 2 }).default("0"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
     updatedAt: timestamp("updatedAt", { withTimezone: true })
       .notNull()
       .defaultNow()
@@ -598,7 +743,9 @@ export const maintenanceComments = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
     body: text("body").notNull(),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     index("maintenanceComments_maintenanceRequestId_index").on(
@@ -618,7 +765,9 @@ export const maintenanceAttachments = pgTable(
     fileName: varchar("fileName", { length: 256 }),
     contentType: varchar("contentType", { length: 128 }),
     sizeBytes: integer("sizeBytes"),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     index("maintenanceAttachments_maintenanceRequestId_index").on(
@@ -632,10 +781,12 @@ export const activityLogs = pgTable(
   "activityLogs",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    organizationId: uuid("organizationId")
-      .references(() => organizations.id, { onDelete: "set null" }),
-    actorUserId: uuid("actorUserId")
-      .references(() => users.id, { onDelete: "set null" }),
+    organizationId: uuid("organizationId").references(() => organizations.id, {
+      onDelete: "set null",
+    }),
+    actorUserId: uuid("actorUserId").references(() => users.id, {
+      onDelete: "set null",
+    }),
     action: activityActionEnum("action").notNull(),
     targetTable: varchar("targetTable", { length: 128 }).notNull(),
     targetId: varchar("targetId", { length: 64 }).notNull(), // store UUID string or composite identifier
@@ -643,7 +794,9 @@ export const activityLogs = pgTable(
     changes: jsonb("changes").$type<Record<string, unknown>>(), // before/after diff
     ipAddress: varchar("ipAddress", { length: 64 }),
     userAgent: varchar("userAgent", { length: 256 }),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("createdAt", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
   },
   (t) => [
     index("activityLogs_organizationId_index").on(t.organizationId),
@@ -660,11 +813,16 @@ export const usersRelations = relations(users, ({ many }) => ({
   refreshTokens: many(refreshTokens),
   userOrganizations: many(userOrganizations),
   propertyManagers: many(propertyManagers),
-  maintenanceRequestsCreated: many(maintenanceRequests, { relationName: "createdBy" }),
-  maintenanceRequestsAssigned: many(maintenanceRequests, { relationName: "assignedTo" }),
+  maintenanceRequestsCreated: many(maintenanceRequests, {
+    relationName: "createdBy",
+  }),
+  maintenanceRequestsAssigned: many(maintenanceRequests, {
+    relationName: "assignedTo",
+  }),
   maintenanceComments: many(maintenanceComments),
   paymentsReceivedFrom: many(payments, { relationName: "receivedFrom" }),
   paymentsReceivedBy: many(payments, { relationName: "receivedBy" }),
+  propertiesCreated: many(properties, { relationName: "createdBy" }),
 }));
 
 export const userAuthRelations = relations(userAuth, ({ one }) => ({
@@ -675,30 +833,57 @@ export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
   user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
 }));
 
+export const organizationsRelations = relations(
+  organizations,
+  ({ one, many }) => ({
+    userOrganizations: many(userOrganizations),
+    properties: many(properties),
+    amenities: many(amenities),
+    leases: many(leases),
+    invoices: many(invoices),
+    payments: many(payments),
+    receipts: many(receipts),
+    activityLogs: many(activityLogs),
+    settings: one(organizationSettings, {
+      fields: [organizations.id],
+      references: [organizationSettings.organizationId],
+    }),
+  })
+);
 
-export const organizationsRelations = relations(organizations, ({ many }) => ({
-  userOrganizations: many(userOrganizations),
-  properties: many(properties),
-  amenities: many(amenities),
-  leases: many(leases),
-  invoices: many(invoices),
-  payments: many(payments),
-  receipts: many(receipts),
-  activityLogs: many(activityLogs),
-}));
+export const userOrganizationsRelations = relations(
+  userOrganizations,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userOrganizations.userId],
+      references: [users.id],
+    }),
+    organization: one(organizations, {
+      fields: [userOrganizations.organizationId],
+      references: [organizations.id],
+    }),
+  })
+);
 
-export const userOrganizationsRelations = relations(userOrganizations, ({ one }) => ({
-  user: one(users, { fields: [userOrganizations.userId], references: [users.id] }),
-  organization: one(organizations, {
-    fields: [userOrganizations.organizationId],
-    references: [organizations.id],
-  }),
-}));
+export const organizationSettingsRelations = relations(
+  organizationSettings,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationSettings.organizationId],
+      references: [organizations.id],
+    }),
+  })
+);
 
 export const propertiesRelations = relations(properties, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [properties.organizationId],
     references: [organizations.id],
+  }),
+  createdBy: one(users, {
+    fields: [properties.createdByUserId],
+    references: [users.id],
+    relationName: "createdBy",
   }),
   units: many(units),
   propertyManagers: many(propertyManagers),
@@ -706,13 +891,25 @@ export const propertiesRelations = relations(properties, ({ one, many }) => ({
   leases: many(leases),
 }));
 
-export const propertyManagersRelations = relations(propertyManagers, ({ one }) => ({
-  property: one(properties, { fields: [propertyManagers.propertyId], references: [properties.id] }),
-  user: one(users, { fields: [propertyManagers.userId], references: [users.id] }),
-}));
+export const propertyManagersRelations = relations(
+  propertyManagers,
+  ({ one }) => ({
+    property: one(properties, {
+      fields: [propertyManagers.propertyId],
+      references: [properties.id],
+    }),
+    user: one(users, {
+      fields: [propertyManagers.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 export const unitsRelations = relations(units, ({ one, many }) => ({
-  property: one(properties, { fields: [units.propertyId], references: [properties.id] }),
+  property: one(properties, {
+    fields: [units.propertyId],
+    references: [properties.id],
+  }),
   unitAmenities: many(unitAmenities),
   leases: many(leases),
   maintenanceRequests: many(maintenanceRequests),
@@ -728,12 +925,21 @@ export const amenitiesRelations = relations(amenities, ({ one, many }) => ({
 
 export const unitAmenitiesRelations = relations(unitAmenities, ({ one }) => ({
   unit: one(units, { fields: [unitAmenities.unitId], references: [units.id] }),
-  amenity: one(amenities, { fields: [unitAmenities.amenityId], references: [amenities.id] }),
+  amenity: one(amenities, {
+    fields: [unitAmenities.amenityId],
+    references: [amenities.id],
+  }),
 }));
 
 export const leasesRelations = relations(leases, ({ one, many }) => ({
-  organization: one(organizations, { fields: [leases.organizationId], references: [organizations.id] }),
-  property: one(properties, { fields: [leases.propertyId], references: [properties.id] }),
+  organization: one(organizations, {
+    fields: [leases.organizationId],
+    references: [organizations.id],
+  }),
+  property: one(properties, {
+    fields: [leases.propertyId],
+    references: [properties.id],
+  }),
   unit: one(units, { fields: [leases.unitId], references: [units.id] }),
   tenant: one(users, { fields: [leases.tenantUserId], references: [users.id] }),
   invoices: many(invoices),
@@ -741,14 +947,20 @@ export const leasesRelations = relations(leases, ({ one, many }) => ({
 }));
 
 export const invoicesRelations = relations(invoices, ({ one, many }) => ({
-  organization: one(organizations, { fields: [invoices.organizationId], references: [organizations.id] }),
+  organization: one(organizations, {
+    fields: [invoices.organizationId],
+    references: [organizations.id],
+  }),
   lease: one(leases, { fields: [invoices.leaseId], references: [leases.id] }),
   items: many(invoiceItems),
   allocations: many(paymentAllocations),
 }));
 
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
-  invoice: one(invoices, { fields: [invoiceItems.invoiceId], references: [invoices.id] }),
+  invoice: one(invoices, {
+    fields: [invoiceItems.invoiceId],
+    references: [invoices.id],
+  }),
 }));
 
 export const paymentsRelations = relations(payments, ({ one, many }) => ({
@@ -774,17 +986,19 @@ export const paymentsRelations = relations(payments, ({ one, many }) => ({
   receipt: many(receipts),
 }));
 
-
-export const paymentAllocationsRelations = relations(paymentAllocations, ({ one }) => ({
-  payment: one(payments, {
-    fields: [paymentAllocations.paymentId],
-    references: [payments.id],
-  }),
-  invoice: one(invoices, {
-    fields: [paymentAllocations.invoiceId],
-    references: [invoices.id],
-  }),
-}));
+export const paymentAllocationsRelations = relations(
+  paymentAllocations,
+  ({ one }) => ({
+    payment: one(payments, {
+      fields: [paymentAllocations.paymentId],
+      references: [payments.id],
+    }),
+    invoice: one(invoices, {
+      fields: [paymentAllocations.invoiceId],
+      references: [invoices.id],
+    }),
+  })
+);
 
 export const receiptsRelations = relations(receipts, ({ one }) => ({
   organization: one(organizations, {
@@ -797,33 +1011,59 @@ export const receiptsRelations = relations(receipts, ({ one }) => ({
   }),
 }));
 
-export const maintenanceRequestsRelations = relations(maintenanceRequests, ({ one, many }) => ({
-  organization: one(organizations, { fields: [maintenanceRequests.organizationId], references: [organizations.id] }),
-  property: one(properties, { fields: [maintenanceRequests.propertyId], references: [properties.id] }),
-  unit: one(units, { fields: [maintenanceRequests.unitId], references: [units.id] }),
-  createdBy: one(users, { fields: [maintenanceRequests.createdByUserId], references: [users.id], relationName: "createdBy" }),
-  assignedTo: one(users, { fields: [maintenanceRequests.assignedToUserId], references: [users.id], relationName: "assignedTo" }),
-  comments: many(maintenanceComments),
-  attachments: many(maintenanceAttachments),
-}));
+export const maintenanceRequestsRelations = relations(
+  maintenanceRequests,
+  ({ one, many }) => ({
+    organization: one(organizations, {
+      fields: [maintenanceRequests.organizationId],
+      references: [organizations.id],
+    }),
+    property: one(properties, {
+      fields: [maintenanceRequests.propertyId],
+      references: [properties.id],
+    }),
+    unit: one(units, {
+      fields: [maintenanceRequests.unitId],
+      references: [units.id],
+    }),
+    createdBy: one(users, {
+      fields: [maintenanceRequests.createdByUserId],
+      references: [users.id],
+      relationName: "createdBy",
+    }),
+    assignedTo: one(users, {
+      fields: [maintenanceRequests.assignedToUserId],
+      references: [users.id],
+      relationName: "assignedTo",
+    }),
+    comments: many(maintenanceComments),
+    attachments: many(maintenanceAttachments),
+  })
+);
 
-export const maintenanceCommentsRelations = relations(maintenanceComments, ({ one }) => ({
-  maintenanceRequest: one(maintenanceRequests, {
-    fields: [maintenanceComments.maintenanceRequestId],
-    references: [maintenanceRequests.id],
-  }),
-  author: one(users, {
-    fields: [maintenanceComments.authorUserId],
-    references: [users.id],
-  }),
-}));
+export const maintenanceCommentsRelations = relations(
+  maintenanceComments,
+  ({ one }) => ({
+    maintenanceRequest: one(maintenanceRequests, {
+      fields: [maintenanceComments.maintenanceRequestId],
+      references: [maintenanceRequests.id],
+    }),
+    author: one(users, {
+      fields: [maintenanceComments.authorUserId],
+      references: [users.id],
+    }),
+  })
+);
 
-export const maintenanceAttachmentsRelations = relations(maintenanceAttachments, ({ one }) => ({
-  maintenanceRequest: one(maintenanceRequests, {
-    fields: [maintenanceAttachments.maintenanceRequestId],
-    references: [maintenanceRequests.id],
-  }),
-}));
+export const maintenanceAttachmentsRelations = relations(
+  maintenanceAttachments,
+  ({ one }) => ({
+    maintenanceRequest: one(maintenanceRequests, {
+      fields: [maintenanceAttachments.maintenanceRequestId],
+      references: [maintenanceRequests.id],
+    }),
+  })
+);
 
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   organization: one(organizations, {
@@ -862,6 +1102,16 @@ export type NewOrganization = typeof organizations.$inferInsert;
 
 export type UserOrganization = typeof userOrganizations.$inferSelect;
 export type NewUserOrganization = typeof userOrganizations.$inferInsert;
+
+export type OrganizationSettings = typeof organizationSettings.$inferSelect;
+export type NewOrganizationSettings = typeof organizationSettings.$inferInsert;
+
+export type UserOrganizationPermissions = NonNullable<
+  UserOrganization["permissions"]
+>;
+export type PropertyManagerPermissions = NonNullable<
+  PropertyManager["permissions"]
+>;
 
 export type Property = typeof properties.$inferSelect;
 export type NewProperty = typeof properties.$inferInsert;
@@ -903,7 +1153,8 @@ export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 export type NewMaintenanceComment = typeof maintenanceComments.$inferInsert;
 
 export type MaintenanceAttachment = typeof maintenanceAttachments.$inferSelect;
-export type NewMaintenanceAttachment = typeof maintenanceAttachments.$inferInsert;
+export type NewMaintenanceAttachment =
+  typeof maintenanceAttachments.$inferInsert;
 
 export type ActivityLog = typeof activityLogs.$inferSelect;
 export type NewActivityLog = typeof activityLogs.$inferInsert;
@@ -918,5 +1169,6 @@ export type LeaseStatusEnum = (typeof leaseStatusEnum.enumValues)[number];
 export type InvoiceStatusEnum = (typeof invoiceStatusEnum.enumValues)[number];
 export type PaymentMethodEnum = (typeof paymentMethodEnum.enumValues)[number];
 export type PaymentStatusEnum = (typeof paymentStatusEnum.enumValues)[number];
-export type MaintenanceStatusEnum = (typeof maintenanceStatusEnum.enumValues)[number];
+export type MaintenanceStatusEnum =
+  (typeof maintenanceStatusEnum.enumValues)[number];
 export type PriorityEnum = (typeof priorityEnum.enumValues)[number];

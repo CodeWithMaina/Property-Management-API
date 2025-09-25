@@ -11,6 +11,17 @@ export interface UserOrganizationInput {
   organizationId: string;
   role: UserRoleEnum;
   isPrimary: boolean;
+  permissions?: {
+    canManageProperties?: boolean;
+    canManageUnits?: boolean;
+    canManageLeases?: boolean;
+    canManageTenants?: boolean;
+    canManageInvoices?: boolean;
+    canManagePayments?: boolean;
+    canManageMaintenance?: boolean;
+    canManageUsers?: boolean;
+    canViewReports?: boolean;
+  };
 }
 
 export interface RoleUpdateInput {

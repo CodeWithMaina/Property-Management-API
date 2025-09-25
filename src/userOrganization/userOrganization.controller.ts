@@ -10,7 +10,7 @@ import {
 import { createSuccessResponse } from "../utils/apiResponse/apiResponse.helper";
 import db from "../drizzle/db";
 import { eq } from "drizzle-orm";
-import { userOrganizations } from "../drizzle/schema";
+import { userOrganizations, users } from "../drizzle/schema";
 import {
   PrimaryOrganizationSchema,
   UserOrganizationSchema,
@@ -33,17 +33,23 @@ export const getOrganizationUsers = asyncHandler(
     }
 
     const currentUserId = (req as any).user?.id;
-    const users = await getOrganizationUsersServices(organizationId);
-    const isMember = users.some((user) => user.user.id === currentUserId);
-    const isAdmin =
-      (req as any).user?.role === "admin" ||
-      (req as any).user?.role === "superAdmin";
+    const currentUserRole = (req as any).user?.role;
+    
+    // Check if user has access to this organization
+    const userAccess = await db.query.userOrganizations.findFirst({
+      where: eq(userOrganizations.userId, currentUserId),
+    });
+
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    const isMember = userAccess?.organizationId === organizationId;
 
     if (!isMember && !isAdmin) {
       throw new AuthorizationError(
         "You don't have access to this organization"
       );
     }
+
+    const users = await getOrganizationUsersServices(organizationId);
 
     const response = createSuccessResponse(
       users,
@@ -60,6 +66,16 @@ export const addUserToOrganization = asyncHandler(
 
     if (!organizationId) {
       throw new ValidationError("Organization ID is required");
+    }
+
+    // Check if current user has permission to add users
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can add users to organizations"
+      );
     }
 
     const validatedData = UserOrganizationSchema.parse({
@@ -101,6 +117,16 @@ export const updateUserRole = asyncHandler(
       throw new ValidationError("User organization ID is required");
     }
 
+    // Check if current user has permission to update roles
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can update user roles"
+      );
+    }
+
     const validatedData = RoleUpdateSchema.parse(req.body);
 
     try {
@@ -137,18 +163,13 @@ export const setPrimaryOrganization = asyncHandler(
 
     const userOrg = await db.query.userOrganizations.findFirst({
       where: eq(userOrganizations.id, userOrganizationId),
-      with: {
-        user: {
-          columns: { id: true },
-        },
-      },
     });
 
     if (!userOrg) {
       throw new NotFoundError("User organization membership not found");
     }
 
-    if (userOrg.user.id !== currentUserId) {
+    if (userOrg.userId !== currentUserId) {
       throw new AuthorizationError(
         "You can only set your own primary organization"
       );
@@ -184,6 +205,16 @@ export const removeUserFromOrganization = asyncHandler(
 
     if (!userOrganizationId) {
       throw new ValidationError("User organization ID is required");
+    }
+
+    // Check if current user has permission to remove users
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can remove users from organizations"
+      );
     }
 
     try {

@@ -20,6 +20,7 @@ import {
   activityLogs,
   userAuth,
   refreshTokens,
+  invites,
 } from "./schema";
 
 async function seed() {
@@ -45,6 +46,7 @@ async function seed() {
   await db.delete(organizations).execute();
   await db.delete(refreshTokens).execute();
   await db.delete(userAuth).execute();
+  await db.delete(invites).execute();
   await db.delete(users).execute();
   await db.delete(activityLogs).execute();
 
@@ -283,6 +285,7 @@ async function seed() {
         country: "Kenya",
         timezone: "Africa/Nairobi",
         isActive: true,
+        createdByUserId: userIds[2].id, // Manager created this property
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -297,6 +300,7 @@ async function seed() {
         country: "Kenya",
         timezone: "Africa/Nairobi",
         isActive: true,
+        createdByUserId: userIds[2].id, // Manager created this property
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -311,6 +315,7 @@ async function seed() {
         country: "Kenya",
         timezone: "Africa/Nairobi",
         isActive: true,
+        createdByUserId: userIds[2].id, // Manager created this property
         createdAt: new Date(),
         updatedAt: new Date(),
       },
@@ -617,7 +622,7 @@ async function seed() {
         organizationId: organizationIds[1].id,
         propertyId: propertyIds[2].id,
         unitId: unitIds[6].id,
-        tenantUserId: userIds[8].id,
+        tenantUserId: userIds[8].id, // Maintenance Staff 1 as tenant
         status: "active",
         startDate: new Date(now.getFullYear(), now.getMonth() - 6, 20),
         endDate: new Date(now.getFullYear() + 1, now.getMonth() - 6, 20),
@@ -1055,12 +1060,12 @@ async function seed() {
     },
   ]);
 
-  // 15. Receipts - 5 entries (one for each payment)
+  // 15. Receipts - 5 entries (one per payment)
   await db.insert(receipts).values([
     {
       organizationId: organizationIds[0].id,
       paymentId: paymentIds[0].id,
-      receiptNumber: `RCPT-${now.getFullYear()}${now
+      receiptNumber: `RCP-${now.getFullYear()}${now
         .getMonth()
         .toString()
         .padStart(2, "0")}-001`,
@@ -1070,7 +1075,7 @@ async function seed() {
     {
       organizationId: organizationIds[0].id,
       paymentId: paymentIds[1].id,
-      receiptNumber: `RCPT-${now.getFullYear()}${now
+      receiptNumber: `RCP-${now.getFullYear()}${now
         .getMonth()
         .toString()
         .padStart(2, "0")}-002`,
@@ -1080,7 +1085,7 @@ async function seed() {
     {
       organizationId: organizationIds[0].id,
       paymentId: paymentIds[2].id,
-      receiptNumber: `RCPT-${now.getFullYear()}${now
+      receiptNumber: `RCP-${now.getFullYear()}${now
         .getMonth()
         .toString()
         .padStart(2, "0")}-003`,
@@ -1090,7 +1095,7 @@ async function seed() {
     {
       organizationId: organizationIds[1].id,
       paymentId: paymentIds[3].id,
-      receiptNumber: `RCPT-${now.getFullYear()}${now
+      receiptNumber: `RCP-${now.getFullYear()}${now
         .getMonth()
         .toString()
         .padStart(2, "0")}-004`,
@@ -1100,7 +1105,7 @@ async function seed() {
     {
       organizationId: organizationIds[1].id,
       paymentId: paymentIds[4].id,
-      receiptNumber: `RCPT-${now.getFullYear()}${now
+      receiptNumber: `RCP-${now.getFullYear()}${now
         .getMonth()
         .toString()
         .padStart(2, "0")}-005`,
@@ -1109,7 +1114,7 @@ async function seed() {
     },
   ]);
 
-  // 16. Maintenance Requests - 4 entries
+  // 16. Maintenance Requests - 6 entries
 const maintenanceRequestIds = await db
   .insert(maintenanceRequests)
   .values([
@@ -1117,271 +1122,271 @@ const maintenanceRequestIds = await db
       organizationId: organizationIds[0].id,
       propertyId: propertyIds[0].id,
       unitId: unitIds[0].id,
-      createdByUserId: userIds[4].id, // Tenant 1
-      assignedToUserId: userIds[8].id, // Maintenance Staff 1 (index 8)
-      title: "Leaking faucet in kitchen",
-      description: "The kitchen faucet has been leaking for the past few days. It's wasting water and needs to be fixed.",
+      createdByUserId: userIds[4].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[8].id,
+      title: "Leaking Kitchen Faucet",
+      description: "The kitchen faucet has been leaking for 2 days",
       priority: "medium",
-      status: "inProgress",
-      costAmount: "0.00",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5),
-      updatedAt: new Date(now.getFullYear(), now.getMonth(), 6),
+      status: "inProgress", // Changed from "inProgress" to match enum
+      scheduledAt: new Date(now.getFullYear(), now.getMonth(), 5),
+      resolvedAt: null, // Added resolvedAt
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
       organizationId: organizationIds[0].id,
       propertyId: propertyIds[0].id,
       unitId: unitIds[1].id,
-      createdByUserId: userIds[5].id, // Tenant 2
-      assignedToUserId: userIds[8].id, // Maintenance Staff 1 (index 8)
-      title: "AC not cooling properly",
-      description: "The air conditioning unit is running but not cooling the room effectively.",
+      createdByUserId: userIds[5].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[9].id,
+      title: "AC Not Cooling",
+      description: "Air conditioner not cooling properly",
       priority: "high",
       status: "open",
-      costAmount: "0.00",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 8),
-      updatedAt: new Date(now.getFullYear(), now.getMonth(), 8),
+      scheduledAt: new Date(now.getFullYear(), now.getMonth(), 8),
+      resolvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
       organizationId: organizationIds[0].id,
       propertyId: propertyIds[1].id,
       unitId: unitIds[3].id,
-      createdByUserId: userIds[6].id, // Tenant 3
-      assignedToUserId: userIds[9].id, // Maintenance Staff 2 (index 9)
-      title: "Broken window latch",
-      description: "The latch on the bedroom window is broken, making it difficult to secure the window properly.",
-      priority: "low",
-      status: "resolved",
-      resolvedAt: new Date(now.getFullYear(), now.getMonth(), 12),
-      costAmount: "0.00",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 10),
-      updatedAt: new Date(now.getFullYear(), now.getMonth(), 12),
+      createdByUserId: userIds[6].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[8].id,
+      title: "Broken Window",
+      description: "Bedroom window won't close properly",
+      priority: "medium",
+      status: "resolved", // Changed from "completed" to "resolved"
+      scheduledAt: new Date(now.getFullYear(), now.getMonth() - 1, 15),
+      resolvedAt: new Date(now.getFullYear(), now.getMonth() - 1, 18), // Fixed: changed from completedAt to resolvedAt
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
       organizationId: organizationIds[1].id,
       propertyId: propertyIds[2].id,
       unitId: unitIds[5].id,
-      createdByUserId: userIds[7].id, // Tenant 4
-      assignedToUserId: userIds[9].id, // Maintenance Staff 2 (index 9)
-      title: "Blocked bathroom drain",
-      description: "The bathroom sink drain is blocked and water is draining very slowly.",
+      createdByUserId: userIds[7].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[9].id,
+      title: "Electrical Outlet Not Working",
+      description: "Living room outlet stopped working",
+      priority: "high",
+      status: "inProgress",
+      scheduledAt: new Date(now.getFullYear(), now.getMonth(), 10),
+      resolvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      organizationId: organizationIds[1].id,
+      propertyId: propertyIds[2].id,
+      unitId: unitIds[6].id,
+      createdByUserId: userIds[8].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[8].id,
+      title: "Balcony Door Stuck",
+      description: "Sliding balcony door difficult to open",
+      priority: "low",
+      status: "open",
+      scheduledAt: new Date(now.getFullYear(), now.getMonth(), 12),
+      resolvedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      organizationId: organizationIds[0].id,
+      propertyId: propertyIds[0].id,
+      unitId: null, // Common area request, no specific unit
+      createdByUserId: userIds[3].id, // Fixed: changed from submittedByUserId to createdByUserId
+      assignedToUserId: userIds[9].id,
+      title: "Common Area Lighting",
+      description: "Lights in hallway not working",
       priority: "medium",
-      status: "onHold",
-      scheduledAt: new Date(now.getFullYear(), now.getMonth() + 1, 5),
-      costAmount: "0.00",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 15),
-      updatedAt: new Date(now.getFullYear(), now.getMonth(), 16),
+      status: "closed", // Changed from "completed" to "closed"
+      scheduledAt: new Date(now.getFullYear(), now.getMonth() - 1, 20),
+      resolvedAt: new Date(now.getFullYear(), now.getMonth() - 1, 22), // Fixed: changed from completedAt to resolvedAt
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ])
   .returning({ id: maintenanceRequests.id });
 
-// 17. Maintenance Comments - 2-3 comments per request
+  // 17. Maintenance Comments - 2-3 comments per request
 await db.insert(maintenanceComments).values([
   {
     maintenanceRequestId: maintenanceRequestIds[0].id,
     authorUserId: userIds[4].id, // Tenant 1
-    body: "I've placed a bucket under the leak for now to catch the water.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
+    body: "The leak seems to be getting worse overnight",
+    createdAt: new Date(),
   },
   {
     maintenanceRequestId: maintenanceRequestIds[0].id,
     authorUserId: userIds[8].id, // Maintenance Staff 1
-    body: "I'll come by tomorrow afternoon to take a look at the faucet.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
+    body: "Will check it tomorrow morning with tools",
+    createdAt: new Date(),
   },
   {
     maintenanceRequestId: maintenanceRequestIds[1].id,
     authorUserId: userIds[5].id, // Tenant 2
-    body: "This is becoming urgent as the temperatures are rising.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 9, 9, 0),
+    body: "It's getting very hot in the apartment",
+    createdAt: new Date(),
   },
   {
     maintenanceRequestId: maintenanceRequestIds[2].id,
     authorUserId: userIds[6].id, // Tenant 3
-    body: "The window is in the second bedroom.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 20),
-  },
-  {
-    maintenanceRequestId: maintenanceRequestIds[2].id,
-    authorUserId: userIds[9].id, // Maintenance Staff 2
-    body: "I've ordered the replacement part. Should arrive in 2 days.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 16, 45),
-  },
-  {
-    maintenanceRequestId: maintenanceRequestIds[2].id,
-    authorUserId: userIds[9].id, // Maintenance Staff 2
-    body: "Fixed the latch today. Please confirm it's working properly.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
+    body: "Thank you for fixing it quickly!",
+    createdAt: new Date(),
   },
   {
     maintenanceRequestId: maintenanceRequestIds[3].id,
-    authorUserId: userIds[7].id, // Tenant 4
-    body: "I tried using a plunger but it didn't help much.",
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 0),
+    authorUserId: userIds[9].id, // Maintenance Staff 2
+    body: "Need to check the circuit breaker first",
+    createdAt: new Date(),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[4].id,
+    authorUserId: userIds[8].id, // Maintenance Staff 1
+    body: "I'll look at this over the weekend",
+    createdAt: new Date(),
+  },
+  {
+    maintenanceRequestId: maintenanceRequestIds[5].id,
+    authorUserId: userIds[3].id, // Caretaker
+    body: "All lights are now working properly",
+    createdAt: new Date(),
   },
 ]);
 
-// 18. Maintenance Attachments - 1-2 attachments per request
-await db.insert(maintenanceAttachments).values([
+  // 18. Activity Logs - 10 entries
+await db.insert(activityLogs).values([
   {
-    maintenanceRequestId: maintenanceRequestIds[0].id,
-    fileName: "leaking_faucet.jpg",
-    fileUrl: "https://example.com/attachments/leaking_faucet.jpg",
-    contentType: "image/jpeg",
-    sizeBytes: 102400,
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 35),
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[2].id, // Changed from userId to actorUserId
+    action: "create", // Changed from "property.created" to match enum
+    targetTable: "properties", // Changed from resourceType to targetTable
+    targetId: propertyIds[0].id, // Changed from resourceId to targetId
+    description: "Property created: Westlands Apartments", // Added description
+    changes: { propertyName: "Westlands Apartments" }, // Changed from details to changes
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
   },
   {
-    maintenanceRequestId: maintenanceRequestIds[1].id,
-    fileName: "ac_unit.mp4",
-    fileUrl: "https://example.com/attachments/ac_unit.mp4",
-    contentType: "video/mp4",
-    sizeBytes: 5120000,
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 8, 15, 20),
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[2].id,
+    action: "create",
+    targetTable: "leases",
+    targetId: leaseIds[0].id,
+    description: "Lease created for Tenant 1 in unit A-101",
+    changes: { tenantName: "Tenant 1", unitCode: "A-101" },
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
   },
   {
-    maintenanceRequestId: maintenanceRequestIds[2].id,
-    fileName: "broken_latch.jpg",
-    fileUrl: "https://example.com/attachments/broken_latch.jpg",
-    contentType: "image/jpeg",
-    sizeBytes: 204800,
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 10, 14, 25),
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[4].id,
+    action: "create", // Changed from "maintenance.submitted" to "create"
+    targetTable: "maintenanceRequests",
+    targetId: maintenanceRequestIds[0].id,
+    description: "Maintenance request submitted: Leaking Kitchen Faucet",
+    changes: { title: "Leaking Kitchen Faucet" },
+    ipAddress: "192.168.1.101",
+    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15",
+    createdAt: new Date(),
   },
   {
-    maintenanceRequestId: maintenanceRequestIds[3].id,
-    fileName: "blocked_drain.jpg",
-    fileUrl: "https://example.com/attachments/blocked_drain.jpg",
-    contentType: "image/jpeg",
-    sizeBytes: 153600,
-    createdAt: new Date(now.getFullYear(), now.getMonth(), 15, 17, 5),
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[2].id,
+    action: "payment", // Changed from "payment.received" to "payment"
+    targetTable: "payments",
+    targetId: paymentIds[0].id,
+    description: "Payment received from Tenant 1",
+    changes: { amount: "45000.00", tenant: "Tenant 1" },
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[1].id,
+    actorUserId: userIds[2].id,
+    action: "create",
+    targetTable: "properties",
+    targetId: propertyIds[2].id,
+    description: "Property created: Nyali Beach Residences",
+    changes: { propertyName: "Nyali Beach Residences" },
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[1].id,
+    actorUserId: userIds[7].id,
+    action: "create",
+    targetTable: "maintenanceRequests",
+    targetId: maintenanceRequestIds[3].id,
+    description: "Maintenance request submitted: Electrical Outlet Not Working",
+    changes: { title: "Electrical Outlet Not Working" },
+    ipAddress: "192.168.1.102",
+    userAgent: "Mozilla/5.0 (Android 10; Mobile; rv:91.0) Gecko/91.0 Firefox/91.0",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[8].id,
+    action: "assign", // Changed from "maintenance.assigned" to "assign"
+    targetTable: "maintenanceRequests",
+    targetId: maintenanceRequestIds[0].id,
+    description: "Maintenance request assigned to Maintenance Staff 1",
+    changes: { assignedTo: "Maintenance Staff 1" },
+    ipAddress: "192.168.1.103",
+    userAgent: "Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[3].id,
+    action: "create",
+    targetTable: "maintenanceRequests",
+    targetId: maintenanceRequestIds[5].id,
+    description: "Maintenance request submitted: Common Area Lighting",
+    changes: { title: "Common Area Lighting" },
+    ipAddress: "192.168.1.104",
+    userAgent: "Mozilla/5.0 (iPad; CPU OS 13_3 like Mac OS X) AppleWebKit/605.1.15",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[0].id,
+    actorUserId: userIds[2].id,
+    action: "issueInvoice", // Changed from "invoice.issued" to "issueInvoice"
+    targetTable: "invoices",
+    targetId: invoiceIds[0].id,
+    description: `Invoice issued: INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, "0")}-001`,
+    changes: { invoiceNumber: `INV-${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, "0")}-001` },
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
+  },
+  {
+    organizationId: organizationIds[1].id,
+    actorUserId: userIds[2].id,
+    action: "create",
+    targetTable: "leases",
+    targetId: leaseIds[4].id,
+    description: "Lease created for Maintenance Staff 1 in unit NB-201",
+    changes: { tenantName: "Maintenance Staff 1", unitCode: "NB-201" },
+    ipAddress: "192.168.1.100",
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    createdAt: new Date(),
   },
 ]);
 
-  // 19. Activity Logs - 10 entries for various activities
-  await db.insert(activityLogs).values([
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[2].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "leases", // Changed from resourceType
-      targetId: leaseIds[0].id, // Changed from resourceId
-      description: "Created new lease for unit A-101", // Changed from details
-      ipAddress: "192.168.1.100",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 3, 1, 9, 0),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[4].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "maintenanceRequests", // Changed from resourceType
-      targetId: maintenanceRequestIds[0].id, // Changed from resourceId
-      description: "Submitted maintenance request for leaking faucet", // Changed from details
-      ipAddress: "192.168.1.101",
-      userAgent:
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 10, 30),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[2].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "invoices", // Changed from resourceType
-      targetId: invoiceIds[0].id, // Changed from resourceId
-      description: "Generated invoice for current month rent", // Changed from details
-      ipAddress: "192.168.1.100",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 1, 8, 0),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[4].id, // Changed from userId
-      action: "payment", // Fixed enum value
-      targetTable: "payments", // Changed from resourceType
-      targetId: paymentIds[0].id, // Changed from resourceId
-      description: "Made payment via M-Pesa for previous month rent", // Changed from details
-      ipAddress: "192.168.1.101",
-      userAgent:
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 14.0 like Mac OS X) AppleWebKit/605.1.15",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 1, 3, 14, 30),
-    },
-    {
-      organizationId: organizationIds[1].id,
-      actorUserId: userIds[2].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "properties", // Changed from resourceType
-      targetId: propertyIds[2].id, // Changed from resourceId
-      description: "Added new property: Nyali Beach Residences", // Changed from details
-      ipAddress: "192.168.1.100",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 6, 15, 10, 0),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[9].id, // Changed from userId
-      action: "assign", // Fixed enum value
-      targetTable: "maintenanceRequests", // Changed from resourceType
-      targetId: maintenanceRequestIds[0].id, // Changed from resourceId
-      description: "Assigned to fix leaking faucet", // Changed from details
-      ipAddress: "192.168.1.102",
-      userAgent:
-        "Mozilla/5.0 (Android 10; Mobile; rv:68.0) Gecko/68.0 Firefox/68.0",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 5, 16, 15),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[9].id, // Changed from userId
-      action: "statusChange", // Fixed enum value
-      targetTable: "maintenanceRequests", // Changed from resourceType
-      targetId: maintenanceRequestIds[2].id, // Changed from resourceId
-      description: "Completed window latch repair", // Changed from details
-      ipAddress: "192.168.1.103",
-      userAgent:
-        "Mozilla/5.0 (Android 10; Mobile; rv:68.0) Gecko/68.0 Firefox/68.0",
-      createdAt: new Date(now.getFullYear(), now.getMonth(), 12, 11, 30),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[2].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "users", // Changed from resourceType
-      targetId: userIds[3].id, // Changed from resourceId
-      description: "Invited caretaker to join organization", // Changed from details
-      ipAddress: "192.168.1.100",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 4, 20, 11, 0),
-    },
-    {
-      organizationId: organizationIds[1].id,
-      actorUserId: userIds[7].id, // Changed from userId
-      action: "create", // Fixed enum value
-      targetTable: "leases", // Changed from resourceType
-      targetId: leaseIds[3].id, // Changed from resourceId
-      description: "Signed lease agreement for NB-101", // Changed from details
-      ipAddress: "192.168.1.104",
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 4, 10, 15, 30),
-    },
-    {
-      organizationId: organizationIds[0].id,
-      actorUserId: userIds[2].id, // Changed from userId
-      action: "update", // Fixed enum value
-      targetTable: "units", // Changed from resourceType
-      targetId: unitIds[2].id, // Changed from resourceId
-      description: "Updated unit B-201 status to vacant", // Changed from details
-      ipAddress: "192.168.1.100",
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      createdAt: new Date(now.getFullYear(), now.getMonth() - 1, 28, 16, 45),
-    },
-  ]);
-
-  console.log("✅ Seeding completed!");
+  console.log("✅ Seeding completed successfully!");
 }
 
 seed()
-  .catch((e) => {
-    console.error("❌ Seeding failed!");
-    console.error(e);
+  .catch((error) => {
+    console.error("❌ Seeding failed:", error);
     process.exit(1);
   })
   .finally(() => {

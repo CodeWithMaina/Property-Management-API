@@ -69,40 +69,46 @@ export const getAmenitiesServices = async (
 /**
  * Get amenity by ID with detailed information
  */
+// amenities.service.ts - Fixed version
 export const getAmenityByIdServices = async (
   amenityId: string
 ): Promise<Amenity | undefined> => {
-  return await db.query.amenities.findFirst({
-    where: eq(amenities.id, amenityId),
-    with: {
-      organization: {
-        columns: {
-          id: true,
-          name: true,
-          legalName: true,
-        }
-      },
-      unitAmenities: {
-        with: {
-          unit: {
-            columns: {
-              id: true,
-              code: true,
-              propertyId: true,
-            },
-            with: {
-              property: {
-                columns: {
-                  id: true,
-                  name: true,
+  try {
+    return await db.query.amenities.findFirst({
+      where: eq(amenities.id, amenityId),
+      with: {
+        organization: {
+          columns: {
+            id: true,
+            name: true,
+            legalName: true,
+          }
+        },
+        unitAmenities: {
+          with: {
+            unit: {
+              columns: {
+                id: true,
+                code: true,
+                propertyId: true,
+              },
+              with: {
+                property: {
+                  columns: {
+                    id: true,
+                    name: true,
+                  }
                 }
               }
             }
           }
         }
       }
-    }
-  });
+    });
+  } catch (error) {
+    console.error('Error in getAmenityByIdServices:', error);
+    throw error;
+  }
 };
 
 /**

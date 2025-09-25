@@ -22,12 +22,17 @@ import {
   createSuccessResponse,
   createPaginatedResponse,
 } from "../utils/apiResponse/apiResponse.helper";
+import db from "../drizzle/db";
+import { eq } from "drizzle-orm";
+import { userOrganizations } from "../drizzle/schema";
 
 export const getOrganizations = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const queryParams = OrganizationQuerySchema.parse(req.query);
     const currentUserId = (req as any).user?.id;
-    const isAdmin = (req as any).user?.role === 'admin' || (req as any).user?.role === 'superAdmin';
+    const currentUserRole = (req as any).user?.role;
+    
+    const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superAdmin';
     
     const result = await getOrganizationsServices(
       queryParams, 
@@ -66,10 +71,27 @@ export const getOrganizationById = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
+    const currentUserId = (req as any).user?.id;
+    const currentUserRole = (req as any).user?.role;
+    
+    // Check if user has access to this organization
+    const userAccess = await db.query.userOrganizations.findFirst({
+      where: eq(userOrganizations.userId, currentUserId),
+    });
+
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    const isMember = userAccess?.organizationId === organizationId;
+
+    if (!isMember && !isAdmin) {
+      throw new AuthorizationError(
+        "You don't have access to this organization"
+      );
+    }
+
     const organization = await getOrganizationByIdServices(organizationId);
 
     if (!organization) {
-      throw new NotFoundError("Organization");
+      throw new NotFoundError("Organization not found");
     }
 
     const response = createSuccessResponse(
@@ -83,6 +105,16 @@ export const getOrganizationById = asyncHandler(
 
 export const createOrganization = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
+    // Check if current user has permission to create organizations
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can create organizations"
+      );
+    }
+
     const validatedData = OrganizationSchema.parse(req.body);
     const newOrganization = await createOrganizationServices(validatedData);
 
@@ -103,6 +135,16 @@ export const updateOrganization = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
+    // Check if current user has permission to update organizations
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can update organizations"
+      );
+    }
+
     const validatedData = PartialOrganizationSchema.parse(req.body);
     const updatedOrganization = await updateOrganizationServices(
       organizationId,
@@ -110,7 +152,7 @@ export const updateOrganization = asyncHandler(
     );
 
     if (!updatedOrganization) {
-      throw new NotFoundError("Organization");
+      throw new NotFoundError("Organization not found");
     }
 
     const response = createSuccessResponse(
@@ -130,10 +172,20 @@ export const deleteOrganization = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
+    // Check if current user has permission to delete organizations
+    const currentUserRole = (req as any).user?.role;
+    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    
+    if (!isAdmin) {
+      throw new AuthorizationError(
+        "Only admins can delete organizations"
+      );
+    }
+
     const deletedOrganization = await deleteOrganizationServices(organizationId);
 
     if (!deletedOrganization) {
-      throw new NotFoundError("Organization");
+      throw new NotFoundError("Organization not found");
     }
 
     const response = createSuccessResponse(
