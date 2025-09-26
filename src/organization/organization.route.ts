@@ -7,8 +7,13 @@ import {
   updateOrganization,
   deleteOrganization,
 } from "./organization.controller";
+import { authenticateToken } from "../middleware/auth.middleware";
+import { requireOrganizationAccess } from "./organization.middleware";
 
 export const organizationRouter = Router();
+
+// Apply authentication to all organization routes
+organizationRouter.use(authenticateToken);
 
 /**
  * @route GET /organizations
@@ -29,14 +34,14 @@ organizationRouter.post("/organizations", createOrganization);
  * @description Get specific organization details
  * @access Private (Organization members or Admin)
  */
-organizationRouter.get("/organizations/:id", getOrganizationById);
+organizationRouter.get("/organizations/:id", requireOrganizationAccess(), getOrganizationById);
 
 /**
  * @route PUT /organizations/:id
  * @description Update organization information
- * @access Private (Admin/SuperAdmin)
+ * @access Private (Admin/SuperAdmin or Organization Manager)
  */
-organizationRouter.put("/organizations/:id", updateOrganization);
+organizationRouter.put("/organizations/:id", requireOrganizationAccess('manager'), updateOrganization);
 
 /**
  * @route DELETE /organizations/:id

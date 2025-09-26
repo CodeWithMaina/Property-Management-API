@@ -5,6 +5,7 @@ import { organizations, userOrganizations, users, properties } from "../drizzle/
 import { OrganizationInput, PartialOrganizationInput, OrganizationQueryParams } from "./organization.validator";
 import { OrganizationWithRelations } from "./organization.types";
 
+// organization.service.ts - Update the getOrganizationsServices function
 export const getOrganizationsServices = async (
   queryParams: OrganizationQueryParams,
   userId?: string
@@ -28,6 +29,7 @@ export const getOrganizationsServices = async (
     );
   }
 
+  // If userId is provided, filter by user's organizations
   if (userId) {
     const userOrgSubquery = db
       .select({ organizationId: userOrganizations.organizationId })

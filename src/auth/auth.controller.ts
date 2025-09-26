@@ -3,6 +3,7 @@ import { Request, Response, RequestHandler } from "express";
 import bcrypt from "bcrypt";
 import jwt, { JwtPayload } from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
+import { z, ZodError } from "zod";
 
 import {
   createUserService,
@@ -27,19 +28,43 @@ import {
   changePasswordSchema,
 } from "./auth.validator";
 
-import { 
-  TAuthResponse, 
-  TJwtPayload, 
-  TUserSession 
-} from "./auth.types";
-import { z, ZodError } from "zod";
+import { TAuthResponse, TJwtPayload, TUserSession } from "./auth.types";
 
-// Generate JWT token
+// Helper function to format Zod errors safely
+const formatZodError = (error: ZodError) => {
+  return {
+    error: "Validation failed",
+    details: error.issues.map((issue) => ({
+      path: issue.path.join("."),
+      message: issue.message,
+    })),
+  };
+};
+
+// Generate JWT token with proper typing
 const generateToken = (payload: TJwtPayload): string => {
-  const secret = process.env.JWT_SECRET as string;
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is not set");
+  }
+
   const expiresIn = process.env.JWT_EXPIRES_IN || "1h";
   
   return jwt.sign(payload, secret, { expiresIn });
+};
+
+// Generate password reset token
+const generateResetToken = (email: string): string => {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET environment variable is not set");
+  }
+
+  return jwt.sign(
+    { email, purpose: "password_reset" },
+    secret,
+    { expiresIn: "1h" }
+  );
 };
 
 // Generate refresh token
@@ -56,7 +81,9 @@ export const register: RequestHandler = async (req: Request, res: Response) => {
     // Check if user already exists
     const existingUser = await getUserByEmailService(validatedData.email);
     if (existingUser) {
-      return res.status(400).json({ error: "User with this email already exists" });
+      return res
+        .status(400)
+        .json({ error: "User with this email already exists" });
     }
 
     // Create user
@@ -76,17 +103,16 @@ export const register: RequestHandler = async (req: Request, res: Response) => {
     }
 
     res.status(201).json({ message: "User created successfully" });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(500).json({ error: error.message || "Failed to create user" });
+    
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to create user" });
   }
 };
 
@@ -114,9 +140,7 @@ export const login: RequestHandler = async (req: Request, res: Response) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Update last login would be implemented in a separate service
-
-    // Generate tokens
+    // Generate tokens with proper structure
     const tokenPayload: TJwtPayload = {
       userId: user.id,
       email: user.email,
@@ -153,17 +177,16 @@ export const login: RequestHandler = async (req: Request, res: Response) => {
     };
 
     res.status(200).json(authResponse);
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(500).json({ error: error.message || "Failed to login" });
+    
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to login" });
   }
 };
 
@@ -176,19 +199,70 @@ export const logout: RequestHandler = async (req: Request, res: Response) => {
     }
 
     const token = authHeader.substring(7);
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as TUserSession;
+    
+    // Verify token to get user ID
+    let decoded: any;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET as string);
+    } catch (jwtError) {
+      // If token is invalid/expired, still return success for logout
+      console.warn("JWT verification failed during logout:", jwtError);
+      return res.status(200).json({ message: "Logged out successfully" });
+    }
 
-    // Revoke all user refresh tokens
-    await revokeAllUserRefreshTokensService(decoded.userId);
+    // Revoke all user refresh tokens if we have a valid user ID
+    if (decoded && decoded.userId) {
+      await revokeAllUserRefreshTokensService(decoded.userId);
+    }
 
     res.status(200).json({ message: "Logged out successfully" });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to logout" });
+  } catch (error: unknown) {
+    console.error("Logout error:", error);
+    // Even if there's an error, return success for logout
+    res.status(200).json({ message: "Logged out successfully" });
   }
 };
 
+// Get current user profile - Fixed version
+export const getCurrentUser: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
+  try {
+    const userSession = (req as any).user; // This should be set by auth middleware
+
+    if (!userSession || !userSession.userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+
+    // Use the data already loaded by the auth middleware
+    res.status(200).json({
+      user: {
+        id: userSession.user.id,
+        name: userSession.user.fullName,
+        email: userSession.user.email,
+        role: userSession.role,
+        phone: userSession.user.phone || undefined,
+        createdAt: userSession.user.createdAt,
+        organizations: userSession.organizations,
+        managedProperties: userSession.managedProperties,
+      },
+    });
+  } catch (error: unknown) {
+    console.error("Get current user error:", error);
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to get user profile" });
+  }
+}
+
 // Refresh token
-export const refreshToken: RequestHandler = async (req: Request, res: Response) => {
+export const refreshToken: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const validatedData = refreshTokenSchema.parse(req.body);
     const { refreshToken } = validatedData;
@@ -196,7 +270,9 @@ export const refreshToken: RequestHandler = async (req: Request, res: Response) 
     // Get refresh token from database
     const storedToken = await getRefreshTokenService(refreshToken);
     if (!storedToken) {
-      return res.status(401).json({ error: "Invalid or expired refresh token" });
+      return res
+        .status(401)
+        .json({ error: "Invalid or expired refresh token" });
     }
 
     // Get user
@@ -245,47 +321,24 @@ export const refreshToken: RequestHandler = async (req: Request, res: Response) 
     };
 
     res.status(200).json(authResponse);
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(401).json({ error: error.message || "Failed to refresh token" });
-  }
-};
-
-// Get current user profile
-export const getCurrentUser: RequestHandler = async (req: Request, res: Response) => {
-  try {
-    const user = (req as any).user; // Attached by auth middleware
-
-    const userData = await getUserByIdService(user.userId);
-    if (!userData) {
-      return res.status(404).json({ error: "User not found" });
+    
+    if (error instanceof Error) {
+      return res.status(401).json({ error: error.message });
     }
-
-    res.status(200).json({
-      user: {
-        id: userData.id,
-        name: userData.fullName,
-        email: userData.email,
-        role: userData.userOrganizations[0]?.role || "tenant",
-        phone: userData.phone || undefined,
-        createdAt: userData.createdAt,
-      },
-    });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || "Failed to get user profile" });
+    
+    res.status(401).json({ error: "Failed to refresh token" });
   }
 };
 
 // Forgot password
-export const forgotPassword: RequestHandler = async (req: Request, res: Response) => {
+export const forgotPassword: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const validatedData = forgotPasswordSchema.parse(req.body);
     const { email } = validatedData;
@@ -293,15 +346,13 @@ export const forgotPassword: RequestHandler = async (req: Request, res: Response
     const user = await getUserByEmailService(email);
     if (!user) {
       // Don't reveal that user doesn't exist for security
-      return res.status(200).json({ message: "If the email exists, a reset link has been sent" });
+      return res
+        .status(200)
+        .json({ message: "If the email exists, a reset link has been sent" });
     }
 
     // Generate reset token
-    const resetToken = jwt.sign(
-      { email, purpose: "password_reset" },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "1h" }
-    );
+    const resetToken = generateResetToken(email);
 
     // Set token in database
     const expiresAt = new Date();
@@ -311,7 +362,7 @@ export const forgotPassword: RequestHandler = async (req: Request, res: Response
 
     // Send email
     const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-    
+
     try {
       await sendNotificationEmail(
         email,
@@ -324,29 +375,33 @@ export const forgotPassword: RequestHandler = async (req: Request, res: Response
       return res.status(500).json({ error: "Failed to send reset email" });
     }
 
-    res.status(200).json({ message: "If the email exists, a reset link has been sent" });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+    res
+      .status(200)
+      .json({ message: "If the email exists, a reset link has been sent" });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(500).json({ error: error.message || "Failed to process password reset" });
+    
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to process password reset" });
   }
 };
 
 // Reset password
-export const resetPassword: RequestHandler = async (req: Request, res: Response) => {
+export const resetPassword: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const validatedData = resetPasswordSchema.parse(req.body);
     const { token, password } = validatedData;
 
     // Verify token
-    let decoded: any;
+    let decoded: JwtPayload;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
     } catch (jwtError) {
@@ -357,21 +412,26 @@ export const resetPassword: RequestHandler = async (req: Request, res: Response)
       return res.status(400).json({ error: "Invalid token purpose" });
     }
 
+    const email = decoded.email as string;
+    if (!email) {
+      return res.status(400).json({ error: "Invalid token" });
+    }
+
     // Verify token in database
-    const isValid = await verifyResetTokenService(decoded.email as string, token);
+    const isValid = await verifyResetTokenService(email, token);
     if (!isValid) {
       return res.status(400).json({ error: "Invalid or expired token" });
     }
 
     // Update password
-    await updateUserPasswordService(decoded.email as string, password);
+    await updateUserPasswordService(email, password);
 
     // Send confirmation email
     try {
-      const user = await getUserByEmailService(decoded.email as string);
+      const user = await getUserByEmailService(email);
       if (user) {
         await sendNotificationEmail(
-          decoded.email as string,
+          email,
           "Password Reset Successful",
           user.fullName,
           "Your password has been reset successfully. If you didn't request this change, please contact support immediately."
@@ -383,26 +443,32 @@ export const resetPassword: RequestHandler = async (req: Request, res: Response)
     }
 
     res.status(200).json({ message: "Password has been reset successfully" });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(500).json({ error: error.message || "Failed to reset password" });
+    
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to reset password" });
   }
 };
 
 // Change password (authenticated)
-export const changePassword: RequestHandler = async (req: Request, res: Response) => {
+export const changePassword: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
   try {
     const validatedData = changePasswordSchema.parse(req.body);
     const { currentPassword, newPassword } = validatedData;
     const userSession = (req as any).user as TUserSession;
+
+    if (!userSession || !userSession.userId) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
 
     // Get user with auth info
     const user = await getUserByIdService(userSession.userId);
@@ -437,16 +503,15 @@ export const changePassword: RequestHandler = async (req: Request, res: Response
     }
 
     res.status(200).json({ message: "Password changed successfully" });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: error.errors.map(e => ({
-          path: e.path.join('.'),
-          message: e.message
-        }))
-      });
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json(formatZodError(error));
     }
-    res.status(500).json({ error: error.message || "Failed to change password" });
+    
+    if (error instanceof Error) {
+      return res.status(500).json({ error: error.message });
+    }
+    
+    res.status(500).json({ error: "Failed to change password" });
   }
 };

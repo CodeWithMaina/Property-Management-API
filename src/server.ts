@@ -12,6 +12,7 @@ import { errorHandler, notFoundHandler } from "./utils/errorHandler";
 import {propertyManagerRouter} from "./propertyManager/propertyManager.route";
 import { userOrganizationRouter } from "./userOrganization/userOrganization.route";
 import unitAnalyticsRouter from "./unit/unitAnalytics.route";
+import { authRouter } from "./auth/auth.route";
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // 📦 API Routes - should come after middleware but before error handlers
+app.use('/api', authRouter)
 app.use('/api', propertyRouter)
 app.use('/api', propertyManagerRouter)
 app.use('/api', unitRouter)

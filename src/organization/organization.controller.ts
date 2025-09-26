@@ -22,22 +22,44 @@ import {
   createSuccessResponse,
   createPaginatedResponse,
 } from "../utils/apiResponse/apiResponse.helper";
-import db from "../drizzle/db";
-import { eq } from "drizzle-orm";
-import { userOrganizations } from "../drizzle/schema";
+import { TEnhancedUserSession } from "../middleware/authorization/authorization.types";
+
+// Helper function to get user session with proper typing
+const getUserSession = (req: Request): TEnhancedUserSession => {
+  const userSession = (req as any).user as TEnhancedUserSession;
+  if (!userSession) {
+    throw new AuthorizationError("Authentication required");
+  }
+  return userSession;
+};
+
+// Helper to check if user has organization access
+const hasOrganizationAccess = (userSession: TEnhancedUserSession, organizationId: string): boolean => {
+  // Admins have access to all organizations
+  if (userSession.role === 'admin' || userSession.role === 'superAdmin') {
+    return true;
+  }
+  
+  // Check if user is a member of the organization
+  return userSession.organizations.some(org => 
+    org.organizationId === organizationId
+  );
+};
+
+// Helper to check if user has admin role
+const isAdmin = (userSession: TEnhancedUserSession): boolean => {
+  return userSession.role === 'admin' || userSession.role === 'superAdmin';
+};
 
 export const getOrganizations = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
     const queryParams = OrganizationQuerySchema.parse(req.query);
-    const currentUserId = (req as any).user?.id;
-    const currentUserRole = (req as any).user?.role;
+    const userSession = getUserSession(req);
     
-    const isAdmin = currentUserRole === 'admin' || currentUserRole === 'superAdmin';
+    // For non-admin users, only show organizations they belong to
+    const userId = isAdmin(userSession) ? undefined : userSession.userId;
     
-    const result = await getOrganizationsServices(
-      queryParams, 
-      isAdmin ? undefined : currentUserId
-    );
+    const result = await getOrganizationsServices(queryParams, userId);
 
     const pagination = {
       total: result.total,
@@ -71,21 +93,11 @@ export const getOrganizationById = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
-    const currentUserId = (req as any).user?.id;
-    const currentUserRole = (req as any).user?.role;
+    const userSession = getUserSession(req);
     
     // Check if user has access to this organization
-    const userAccess = await db.query.userOrganizations.findFirst({
-      where: eq(userOrganizations.userId, currentUserId),
-    });
-
-    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
-    const isMember = userAccess?.organizationId === organizationId;
-
-    if (!isMember && !isAdmin) {
-      throw new AuthorizationError(
-        "You don't have access to this organization"
-      );
+    if (!hasOrganizationAccess(userSession, organizationId)) {
+      throw new AuthorizationError("You don't have access to this organization");
     }
 
     const organization = await getOrganizationByIdServices(organizationId);
@@ -105,14 +117,11 @@ export const getOrganizationById = asyncHandler(
 
 export const createOrganization = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    // Check if current user has permission to create organizations
-    const currentUserRole = (req as any).user?.role;
-    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    const userSession = getUserSession(req);
     
-    if (!isAdmin) {
-      throw new AuthorizationError(
-        "Only admins can create organizations"
-      );
+    // Check if current user has permission to create organizations
+    if (!isAdmin(userSession)) {
+      throw new AuthorizationError("Only admins can create organizations");
     }
 
     const validatedData = OrganizationSchema.parse(req.body);
@@ -135,14 +144,19 @@ export const updateOrganization = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
-    // Check if current user has permission to update organizations
-    const currentUserRole = (req as any).user?.role;
-    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    const userSession = getUserSession(req);
     
-    if (!isAdmin) {
-      throw new AuthorizationError(
-        "Only admins can update organizations"
+    // Check if user has permission to update this organization
+    if (!isAdmin(userSession)) {
+      // For non-admins, check if they have manager role in this organization
+      const userOrg = userSession.organizations.find(org => 
+        org.organizationId === organizationId && 
+        (org.role === 'admin' || org.role === 'manager')
       );
+      
+      if (!userOrg) {
+        throw new AuthorizationError("You don't have permission to update this organization");
+      }
     }
 
     const validatedData = PartialOrganizationSchema.parse(req.body);
@@ -172,14 +186,11 @@ export const deleteOrganization = asyncHandler(
       throw new ValidationError("Organization ID is required");
     }
 
-    // Check if current user has permission to delete organizations
-    const currentUserRole = (req as any).user?.role;
-    const isAdmin = currentUserRole === "admin" || currentUserRole === "superAdmin";
+    const userSession = getUserSession(req);
     
-    if (!isAdmin) {
-      throw new AuthorizationError(
-        "Only admins can delete organizations"
-      );
+    // Check if current user has permission to delete organizations
+    if (!isAdmin(userSession)) {
+      throw new AuthorizationError("Only admins can delete organizations");
     }
 
     const deletedOrganization = await deleteOrganizationServices(organizationId);
