@@ -1,251 +1,465 @@
 // middleware/auth.middleware.ts
-import { Request, Response, NextFunction } from "express";
+import { Request, Response, NextFunction, RequestHandler } from "express";
 import jwt from "jsonwebtoken";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import db from "../drizzle/db";
-import { users, userOrganizations, propertyManagers } from "../drizzle/schema";
-import { createErrorResponse } from "../utils/apiResponse/apiResponse.helper";
-import { TEnhancedUserSession } from "./authorization/authorization.types";
+import { organizations, organizationSettings } from "../drizzle/schema";
+import {
+  getUserByIdService,
+  verifyRefreshTokenService,
+} from "../auth/auth.service";
+import { TUserWithAuth, TAuthRequest, TJWTPayload } from "../auth/auth.types";
 
-export const authenticateToken = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.startsWith("Bearer ") 
-    ? authHeader.substring(7) 
-    : req.query.token as string;
-
-  if (!token) {
-    return res.status(401).json(
-      createErrorResponse("Access token required", "AUTHENTICATION_ERROR")
-    );
+// Extend Express Request type
+declare global {
+  namespace Express {
+    interface Request {
+      user?: TUserWithAuth;
+      orgId?: string;
+      permissions?: Record<string, boolean | number | string>;
+      deviceId?: string;
+    }
   }
+}
 
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-    
-    // Validate JWT structure
-    if (!decoded.userId || !decoded.email || !decoded.role) {
-      return res.status(401).json(
-        createErrorResponse("Invalid token structure", "AUTHENTICATION_ERROR")
-      );
-    }
+// Error classes for better error handling
+export class AuthenticationError extends Error {
+  constructor(message: string = "Authentication required") {
+    super(message);
+    this.name = "AuthenticationError";
+  }
+}
 
-    const user = await db.query.users.findFirst({
-      where: eq(users.id, decoded.userId),
-      with: {
-        userOrganizations: {
-          with: {
-            organization: true,
-          },
-        },
-        propertyManagers: {
-          with: {
-            property: {
-              with: {
-                organization: true,
-              },
-            },
-          },
-        },
-      },
-    });
+export class AuthorizationError extends Error {
+  constructor(message: string = "Insufficient permissions") {
+    super(message);
+    this.name = "AuthorizationError";
+  }
+}
 
-    if (!user || !user.isActive) {
-      return res.status(401).json(
-        createErrorResponse("User not found or deactivated", "AUTHENTICATION_ERROR")
-      );
-    }
+export class TokenExpiredError extends Error {
+  constructor(message: string = "Token expired") {
+    super(message);
+    this.name = "TokenExpiredError";
+  }
+}
 
-    // Find primary organization
-    const primaryOrg = user.userOrganizations.find(org => org.isPrimary) || user.userOrganizations[0];
-    
-    // Fix: Create properly structured enhanced session
-    const enhancedSession: TEnhancedUserSession = {
-      // JWT payload
-      userId: decoded.userId,
-      email: decoded.email,
-      role: decoded.role,
-      iat: decoded.iat,
-      exp: decoded.exp,
-      
-      // Enhanced user data
-      user: {
-        id: user.id,
-        email: user.email,
-        fullName: user.fullName,
-        phone: user.phone || null,
-        isActive: user.isActive,
-        avatarUrl: user.avatarUrl || null,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-      organizations: user.userOrganizations.map(org => ({
-        id: org.id,
-        organizationId: org.organizationId,
-        organizationName: org.organization.name,
-        role: org.role,
-        isPrimary: org.isPrimary,
-        permissions: org.permissions || {},
-      })),
-      managedProperties: user.propertyManagers.map(pm => ({
-        id: pm.id,
-        propertyId: pm.propertyId,
-        propertyName: pm.property.name,
-        organizationId: pm.property.organizationId,
-        role: pm.role,
-        permissions: pm.permissions || {},
-      })),
-      primaryOrganization: primaryOrg ? {
-        id: primaryOrg.id,
-        organizationId: primaryOrg.organizationId,
-        organizationName: primaryOrg.organization.name,
-        role: primaryOrg.role,
-      } : undefined,
-    };
+/**
+ * 🎯 Type definitions for permissions
+ */
+export type TPermissionKey = 
+  | 'canManageProperties'
+  | 'canCreateProperties'
+  | 'canDeleteProperties'
+  | 'maxProperties'
+  | 'canManageUnits'
+  | 'canCreateUnits'
+  | 'canDeleteUnits'
+  | 'maxUnits'
+  | 'canManageTenants'
+  | 'canCreateTenants'
+  | 'canDeleteTenants'
+  | 'maxTenants'
+  | 'canManageLeases'
+  | 'canCreateLeases'
+  | 'canDeleteLeases'
+  | 'maxLeases'
+  | 'canManageMaintenance'
+  | 'canCreateMaintenance'
+  | 'canDeleteMaintenance'
+  | 'maxMaintenance'
+  | 'canManageFinances'
+  | 'canViewFinancialReports'
+  | 'canProcessPayments'
+  | 'canManageRentCollection'
+  | 'canManageUsers'
+  | 'canInviteUsers'
+  | 'canRemoveUsers'
+  | 'canChangeUserRoles'
+  | 'maxUsers'
+  | 'canManageOrganizationSettings';
 
-    (req as any).user = enhancedSession;
-    next();
-  } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(403).json(
-        createErrorResponse("Invalid token", "AUTHENTICATION_ERROR")
-      );
-    }
-    
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(403).json(
-        createErrorResponse("Token expired", "AUTHENTICATION_ERROR")
-      );
-    }
+export type TPermissions = Partial<Record<TPermissionKey, boolean | number | string>>;
 
-    console.error("Authentication error:", error);
-    return res.status(500).json(
-      createErrorResponse("Authentication failed", "AUTHENTICATION_ERROR")
-    );
-  };
+/**
+ * 🎯 Type guard to check if a string is a valid permission key
+ */
+const isValidPermission = (permission: string): permission is TPermissionKey => {
+  // Create a runtime array from the type for better maintainability
+  const permissionKeys: TPermissionKey[] = [
+    'canManageProperties', 'canCreateProperties', 'canDeleteProperties', 'maxProperties',
+    'canManageUnits', 'canCreateUnits', 'canDeleteUnits', 'maxUnits',
+    'canManageTenants', 'canCreateTenants', 'canDeleteTenants', 'maxTenants',
+    'canManageLeases', 'canCreateLeases', 'canDeleteLeases', 'maxLeases',
+    'canManageMaintenance', 'canCreateMaintenance', 'canDeleteMaintenance', 'maxMaintenance',
+    'canManageFinances', 'canViewFinancialReports', 'canProcessPayments', 'canManageRentCollection',
+    'canManageUsers', 'canInviteUsers', 'canRemoveUsers', 'canChangeUserRoles', 'maxUsers',
+    'canManageOrganizationSettings'
+  ];
+  return permissionKeys.includes(permission as TPermissionKey);
 };
 
-export const optionalAuth = async (
+/**
+ * 🎯 Helper function to safely check permissions
+ */
+const hasPermission = (
+  permissions: Record<string, boolean | number | string> | null | undefined, 
+  permission: TPermissionKey
+): boolean => {
+  if (!permissions) return false;
+  return permissions[permission] === true;
+};
+
+/**
+ * 🔐 Core Authentication Middleware
+ * Validates JWT token and attaches user to request
+ */
+export const requireAuth: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction
 ) => {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.startsWith("Bearer ") 
-    ? authHeader.substring(7) 
-    : req.query.token as string;
+  try {
+    const token = extractTokenFromHeader(req);
+    if (!token) {
+      throw new AuthenticationError("No token provided");
+    }
 
-  if (token) {
+    // Verify JWT
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error("JWT_SECRET not configured");
+    }
+
+    const payload = jwt.verify(token, secret) as TJWTPayload;
+
+    // Check if user exists and is active
+    const user = await getUserByIdService(payload.userId);
+    if (!user) {
+      throw new AuthenticationError("User not found");
+    }
+
+    if (!user.isActive) {
+      throw new AuthenticationError("Account deactivated");
+    }
+
+    // Check email verification if required by organization
+    if (user.userAuth && !user.userAuth.isEmailVerified) {
+      const orgSettings = await getOrganizationSettings(user);
+      if (orgSettings?.mfaRequired) {
+        throw new AuthenticationError("Email verification required");
+      }
+    }
+
+    // Attach user and context to request
+    req.user = user;
+    req.deviceId = payload.deviceId;
+
+    // Set organization context if provided
+    if (payload.orgId) {
+      const userOrg = user.userOrganizations?.find(
+        (uo) => uo.organizationId === payload.orgId
+      );
+      if (userOrg) {
+        req.orgId = payload.orgId;
+        req.permissions = userOrg.permissions || {};
+      }
+    }
+
+    next();
+  } catch (error: any) {
+    if (error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ error: "Token expired" });
+    }
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+    return res.status(401).json({ error: error.message });
+  }
+};
+
+/**
+ * 🛂 Organization Context Middleware
+ * Ensures user is acting within a valid organization
+ */
+export const requireOrgContext: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      throw new AuthenticationError("Authentication required");
+    }
+
+    const orgId = (req.headers["x-org-id"] as string) || req.orgId;
+    if (!orgId) {
+      throw new AuthorizationError("Organization context required");
+    }
+
+    const userOrg = req.user.userOrganizations?.find(
+      (uo) => uo.organizationId === orgId
+    );
+
+    if (!userOrg) {
+      throw new AuthorizationError("Not a member of this organization");
+    }
+
+    // Update request context
+    req.orgId = orgId;
+    req.permissions = userOrg.permissions || {};
+
+    next();
+  } catch (error: any) {
+    return res.status(403).json({ error: error.message });
+  }
+};
+
+/**
+ * 👥 Role-Based Access Control Middleware
+ */
+export const requireRole = (allowedRoles: string[]): RequestHandler => {
+  return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-      
-      if (!decoded.userId) {
+      if (!req.user || !req.orgId) {
+        throw new AuthenticationError(
+          "Authentication and organization context required"
+        );
+      }
+
+      const userOrg = req.user.userOrganizations?.find(
+        (uo) => uo.organizationId === req.orgId
+      );
+
+      if (!userOrg) {
+        throw new AuthorizationError("Not a member of this organization");
+      }
+
+      // Super admin bypass
+      if (userOrg.role === "superAdmin") {
         return next();
       }
 
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, decoded.userId),
-        with: {
-          userOrganizations: {
-            with: {
-              organization: true,
-            },
-          },
-          propertyManagers: {
-            with: {
-              property: {
-                with: {
-                  organization: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (user && user.isActive) {
-        const primaryOrg = user.userOrganizations.find(org => org.isPrimary) || user.userOrganizations[0];
-        
-        const enhancedSession: TEnhancedUserSession = {
-          userId: decoded.userId,
-          email: decoded.email,
-          role: decoded.role,
-          iat: decoded.iat,
-          exp: decoded.exp,
-          user: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            phone: user.phone || null,
-            isActive: user.isActive,
-            avatarUrl: user.avatarUrl || null,
-            createdAt: user.createdAt,
-            updatedAt: user.updatedAt,
-          },
-          organizations: user.userOrganizations.map(org => ({
-            id: org.id,
-            organizationId: org.organizationId,
-            organizationName: org.organization.name,
-            role: org.role,
-            isPrimary: org.isPrimary,
-            permissions: org.permissions || {},
-          })),
-          managedProperties: user.propertyManagers.map(pm => ({
-            id: pm.id,
-            propertyId: pm.propertyId,
-            propertyName: pm.property.name,
-            organizationId: pm.property.organizationId,
-            role: pm.role,
-            permissions: pm.permissions || {},
-          })),
-          primaryOrganization: primaryOrg ? {
-            id: primaryOrg.id,
-            organizationId: primaryOrg.organizationId,
-            organizationName: primaryOrg.organization.name,
-            role: primaryOrg.role,
-          } : undefined,
-        };
-
-        (req as any).user = enhancedSession;
+      if (!allowedRoles.includes(userOrg.role)) {
+        throw new AuthorizationError(
+          `Required roles: ${allowedRoles.join(", ")}`
+        );
       }
-    } catch (error) {
-      // Silently fail for optional auth
-      console.debug("Optional authentication failed:", error);
+
+      next();
+    } catch (error: any) {
+      return res.status(403).json({ error: error.message });
     }
-  }
-  
-  next();
+  };
 };
 
-export const requireRole = (roles: string | string[]) => {
-  const roleArray = Array.isArray(roles) ? roles : [roles];
-  
-  return (req: Request, res: Response, next: NextFunction) => {
-    const userSession = (req as any).user as TEnhancedUserSession;
-    
-    if (!userSession) {
-      return res.status(401).json(
-        createErrorResponse("Authentication required", "AUTHENTICATION_ERROR")
+/**
+ * 🛡 Permission-Based Access Control Middleware
+ */
+export const requirePermission = (permission: TPermissionKey): RequestHandler => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user || !req.orgId) {
+        throw new AuthenticationError(
+          "Authentication and organization context required"
+        );
+      }
+
+      const userOrg = req.user.userOrganizations?.find(
+        (uo) => uo.organizationId === req.orgId
       );
+
+      if (!userOrg) {
+        throw new AuthorizationError("Not a member of this organization");
+      }
+
+      // Super admin bypass
+      if (userOrg.role === "superAdmin") {
+        return next();
+      }
+
+      // Type-safe permission check - no need for validation since we're using TPermissionKey
+      const hasRequiredPermission = (userOrg.permissions as TPermissions)?.[permission] === true;
+      if (!hasRequiredPermission) {
+        throw new AuthorizationError(`Permission denied: ${permission}`);
+      }
+
+      next();
+    } catch (error: any) {
+      return res.status(403).json({ error: error.message });
+    }
+  };
+};
+
+/**
+ * 🛡 Safe Permission-Based Access Control Middleware (Alternative)
+ * This version uses the helper function for additional safety
+ */
+export const requireSafePermission = (permission: TPermissionKey): RequestHandler => {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user || !req.orgId) {
+        throw new AuthenticationError(
+          "Authentication and organization context required"
+        );
+      }
+
+      const userOrg = req.user.userOrganizations?.find(
+        (uo) => uo.organizationId === req.orgId
+      );
+
+      if (!userOrg) {
+        throw new AuthorizationError("Not a member of this organization");
+      }
+
+      // Super admin bypass
+      if (userOrg.role === "superAdmin") {
+        return next();
+      }
+
+      // Use helper function for type-safe permission check
+      if (!hasPermission(userOrg.permissions as TPermissions, permission)) {
+        throw new AuthorizationError(`Permission denied: ${permission}`);
+      }
+
+      next();
+    } catch (error: any) {
+      return res.status(403).json({ error: error.message });
+    }
+  };
+};
+
+/**
+ * 🔄 Refresh Token Validation Middleware
+ */
+export const validateRefreshToken: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { refreshToken, deviceId } = req.body;
+
+    if (!refreshToken) {
+      throw new AuthenticationError("Refresh token required");
     }
 
-    const hasRequiredRole = userSession.organizations.some(org =>
-      roleArray.includes(org.role)
+    const { isValid, userId } = await verifyRefreshTokenService(
+      refreshToken,
+      deviceId
     );
+    if (!isValid || !userId) {
+      throw new AuthenticationError("Invalid or expired refresh token");
+    }
 
-    const hasPropertyRole = userSession.managedProperties.some(property =>
-      roleArray.includes(property.role)
-    );
+    const user = await getUserByIdService(userId);
+    if (!user || !user.isActive) {
+      throw new AuthenticationError("User not found or inactive");
+    }
 
-    if (!hasRequiredRole && !hasPropertyRole) {
-      return res.status(403).json(
-        createErrorResponse("Insufficient permissions", "AUTHORIZATION_ERROR")
-      );
+    req.user = user;
+    req.deviceId = deviceId;
+
+    next();
+  } catch (error: any) {
+    return res.status(401).json({ error: error.message });
+  }
+};
+
+/**
+ * 📱 MFA Enforcement Middleware
+ */
+export const requireMFA: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    if (!req.user) {
+      throw new AuthenticationError("Authentication required");
+    }
+
+    const orgSettings = await getOrganizationSettings(req.user);
+    const requiresMFA =
+      orgSettings?.mfaRequired || req.user.userAuth?.mfaEnabled;
+
+    if (requiresMFA && !req.user.userAuth?.mfaEnabled) {
+      throw new AuthenticationError("MFA setup required");
+    }
+
+    // In a real implementation, you'd verify MFA token here
+    const mfaToken = req.headers["x-mfa-token"] as string;
+    if (requiresMFA && !mfaToken) {
+      throw new AuthenticationError("MFA token required");
     }
 
     next();
-  };
+  } catch (error: any) {
+    return res.status(403).json({ error: error.message });
+  }
 };
+
+/**
+ * 🎣 Utility Functions
+ */
+const extractTokenFromHeader = (req: Request): string | null => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return null;
+
+  const [bearer, token] = authHeader.split(" ");
+  return bearer === "Bearer" ? token : null;
+};
+
+const getOrganizationSettings = async (user: TUserWithAuth) => {
+  if (!user.userOrganizations?.length) return null;
+
+  const primaryOrg = user.userOrganizations.find((uo) => uo.isPrimary);
+  if (!primaryOrg) return null;
+
+  // Query organization settings directly from the organizationSettings table
+  const orgSettings = await db.query.organizationSettings.findFirst({
+    where: eq(organizationSettings.organizationId, primaryOrg.organizationId),
+  });
+
+  return orgSettings || null;
+};
+
+/**
+ * 🔧 Composable Middleware Factory
+ */
+export const createAuthMiddleware = (options: {
+  requireAuth?: boolean;
+  requireOrg?: boolean;
+  roles?: string[];
+  permissions?: TPermissionKey[];
+  requireMFA?: boolean;
+}): RequestHandler[] => {
+  const middlewares: RequestHandler[] = [];
+
+  if (options.requireAuth !== false) {
+    middlewares.push(requireAuth);
+  }
+
+  if (options.requireOrg) {
+    middlewares.push(requireOrgContext);
+  }
+
+  if (options.requireMFA) {
+    middlewares.push(requireMFA);
+  }
+
+  if (options.roles?.length) {
+    middlewares.push(requireRole(options.roles));
+  }
+
+  if (options.permissions?.length) {
+    for (const permission of options.permissions) {
+      middlewares.push(requirePermission(permission));
+    }
+  }
+
+  return middlewares;
+};
+
+// Export the permission types for use in other files
+export { TPermissionKey as PermissionKey, TPermissions as Permissions };

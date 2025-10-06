@@ -264,3 +264,35 @@ export const ErrorCodes = {
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
   DUPLICATE_ENTRY: "DUPLICATE_ENTRY",
 } as const;
+
+/**
+ * Input validation helper
+ */
+export const validateInput = <T>(
+  data: unknown,
+  schema: any
+): T => {
+  try {
+    return schema.parse(data);
+  } catch (error) {
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "name" in error &&
+      (error as any).name === "ZodError"
+    ) {
+      const details: Record<string, string[]> = {};
+      
+      (error as any).errors.forEach((err: any) => {
+        const path = err.path.join(".");
+        if (!details[path]) {
+          details[path] = [];
+        }
+        details[path].push(err.message);
+      });
+
+      throw new ValidationError("Input validation failed", details);
+    }
+    throw error;
+  }
+};

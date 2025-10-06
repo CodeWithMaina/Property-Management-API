@@ -1,4 +1,4 @@
-CREATE TYPE "public"."activityActionEnum" AS ENUM('create', 'update', 'delete', 'statusChange', 'assign', 'unassign', 'comment', 'payment', 'issueInvoice', 'voidInvoice');--> statement-breakpoint
+CREATE TYPE "public"."activityActionEnum" AS ENUM('create', 'update', 'delete', 'statusChange', 'assign', 'unassign', 'comment', 'payment', 'issueInvoice', 'voidInvoice', 'login', 'logout', 'permissionChange');--> statement-breakpoint
 CREATE TYPE "public"."invoiceStatusEnum" AS ENUM('draft', 'issued', 'partiallyPaid', 'paid', 'void', 'overdue');--> statement-breakpoint
 CREATE TYPE "public"."leaseStatusEnum" AS ENUM('draft', 'active', 'pendingMoveIn', 'ended', 'terminated', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."maintenanceStatusEnum" AS ENUM('open', 'inProgress', 'onHold', 'resolved', 'closed', 'cancelled');--> statement-breakpoint
@@ -6,7 +6,7 @@ CREATE TYPE "public"."paymentMethodEnum" AS ENUM('cash', 'mpesa', 'bankTransfer'
 CREATE TYPE "public"."paymentStatusEnum" AS ENUM('pending', 'completed', 'failed', 'refunded', 'cancelled');--> statement-breakpoint
 CREATE TYPE "public"."priorityEnum" AS ENUM('low', 'medium', 'high', 'urgent');--> statement-breakpoint
 CREATE TYPE "public"."unitStatusEnum" AS ENUM('vacant', 'reserved', 'occupied', 'unavailable');--> statement-breakpoint
-CREATE TYPE "public"."userRoleEnum" AS ENUM('tenant', 'caretaker', 'admin', 'superAdmin', 'propertyOwner', 'manager');--> statement-breakpoint
+CREATE TYPE "public"."userRoleEnum" AS ENUM('tenant', 'caretaker', 'manager', 'propertyOwner', 'admin', 'superAdmin');--> statement-breakpoint
 CREATE TABLE "activityLogs" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organizationId" uuid,
@@ -34,6 +34,7 @@ CREATE TABLE "invites" (
 	"email" varchar(320) NOT NULL,
 	"organizationId" uuid NOT NULL,
 	"role" "userRoleEnum" NOT NULL,
+	"permissions" jsonb DEFAULT '{}'::jsonb,
 	"invitedByUserId" uuid,
 	"token" varchar(255) NOT NULL,
 	"expiresAt" timestamp with time zone NOT NULL,
@@ -128,6 +129,15 @@ CREATE TABLE "maintenanceRequests" (
 	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "mfaBackupCodes" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"userId" uuid NOT NULL,
+	"code" varchar(16) NOT NULL,
+	"isUsed" boolean DEFAULT false NOT NULL,
+	"usedAt" timestamp with time zone,
+	"createdAt" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "organizationSettings" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"organizationId" uuid NOT NULL,
@@ -135,7 +145,12 @@ CREATE TABLE "organizationSettings" (
 	"managerCanDeleteProperties" boolean DEFAULT false NOT NULL,
 	"managerCanInviteUsers" boolean DEFAULT true NOT NULL,
 	"managerMaxProperties" integer,
-	"managerPermissions" jsonb DEFAULT '{}'::jsonb,
+	"mfaRequired" boolean DEFAULT false,
+	"defaultCurrency" varchar(3) DEFAULT 'KES',
+	"timezone" varchar(64) DEFAULT 'Africa/Nairobi',
+	"invoiceDueDays" integer DEFAULT 30,
+	"lateFeeEnabled" boolean DEFAULT true,
+	"lateFeePercent" numeric(5, 2) DEFAULT '5.00',
 	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
 	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -173,6 +188,17 @@ CREATE TABLE "payments" (
 	"narrative" varchar(512),
 	"receivedAt" timestamp with time zone DEFAULT now() NOT NULL,
 	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
+	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "permissionTemplates" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"name" varchar(128) NOT NULL,
+	"description" text,
+	"permissions" jsonb DEFAULT '{}'::jsonb NOT NULL,
+	"isSystem" boolean DEFAULT false NOT NULL,
+	"organizationId" uuid,
 	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
 	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -262,6 +288,8 @@ CREATE TABLE "userAuth" (
 	"verificationToken" varchar(255),
 	"resetToken" varchar(255),
 	"resetTokenExpiresAt" timestamp with time zone,
+	"mfaSecret" varchar(255),
+	"mfaEnabled" boolean DEFAULT false NOT NULL,
 	"createdAt" timestamp with time zone DEFAULT now() NOT NULL,
 	"updatedAt" timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -309,6 +337,7 @@ ALTER TABLE "maintenanceRequests" ADD CONSTRAINT "maintenanceRequests_propertyId
 ALTER TABLE "maintenanceRequests" ADD CONSTRAINT "maintenanceRequests_unitId_units_id_fk" FOREIGN KEY ("unitId") REFERENCES "public"."units"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "maintenanceRequests" ADD CONSTRAINT "maintenanceRequests_createdByUserId_users_id_fk" FOREIGN KEY ("createdByUserId") REFERENCES "public"."users"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "maintenanceRequests" ADD CONSTRAINT "maintenanceRequests_assignedToUserId_users_id_fk" FOREIGN KEY ("assignedToUserId") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "mfaBackupCodes" ADD CONSTRAINT "mfaBackupCodes_userId_users_id_fk" FOREIGN KEY ("userId") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organizationSettings" ADD CONSTRAINT "organizationSettings_organizationId_organizations_id_fk" FOREIGN KEY ("organizationId") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "paymentAllocations" ADD CONSTRAINT "paymentAllocations_paymentId_payments_id_fk" FOREIGN KEY ("paymentId") REFERENCES "public"."payments"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "paymentAllocations" ADD CONSTRAINT "paymentAllocations_invoiceId_invoices_id_fk" FOREIGN KEY ("invoiceId") REFERENCES "public"."invoices"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -316,6 +345,7 @@ ALTER TABLE "payments" ADD CONSTRAINT "payments_organizationId_organizations_id_
 ALTER TABLE "payments" ADD CONSTRAINT "payments_leaseId_leases_id_fk" FOREIGN KEY ("leaseId") REFERENCES "public"."leases"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payments" ADD CONSTRAINT "payments_receivedFromUserId_users_id_fk" FOREIGN KEY ("receivedFromUserId") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "payments" ADD CONSTRAINT "payments_receivedByUserId_users_id_fk" FOREIGN KEY ("receivedByUserId") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "permissionTemplates" ADD CONSTRAINT "permissionTemplates_organizationId_organizations_id_fk" FOREIGN KEY ("organizationId") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "properties" ADD CONSTRAINT "properties_organizationId_organizations_id_fk" FOREIGN KEY ("organizationId") REFERENCES "public"."organizations"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "properties" ADD CONSTRAINT "properties_createdByUserId_users_id_fk" FOREIGN KEY ("createdByUserId") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "propertyManagers" ADD CONSTRAINT "propertyManagers_propertyId_properties_id_fk" FOREIGN KEY ("propertyId") REFERENCES "public"."properties"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -355,6 +385,8 @@ CREATE INDEX "maintenanceRequests_propertyId_index" ON "maintenanceRequests" USI
 CREATE INDEX "maintenanceRequests_status_index" ON "maintenanceRequests" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "maintenanceRequests_assignedToUserId_index" ON "maintenanceRequests" USING btree ("assignedToUserId");--> statement-breakpoint
 CREATE INDEX "maintenanceRequests_priority_index" ON "maintenanceRequests" USING btree ("priority");--> statement-breakpoint
+CREATE INDEX "mfaBackupCodes_userId_index" ON "mfaBackupCodes" USING btree ("userId");--> statement-breakpoint
+CREATE INDEX "mfaBackupCodes_isUsed_index" ON "mfaBackupCodes" USING btree ("isUsed");--> statement-breakpoint
 CREATE UNIQUE INDEX "organizationSettings_organizationId_unique" ON "organizationSettings" USING btree ("organizationId");--> statement-breakpoint
 CREATE UNIQUE INDEX "organizations_name_unique" ON "organizations" USING btree ("name");--> statement-breakpoint
 CREATE UNIQUE INDEX "paymentAllocations_paymentId_invoiceId_unique" ON "paymentAllocations" USING btree ("paymentId","invoiceId");--> statement-breakpoint
@@ -364,6 +396,8 @@ CREATE INDEX "payments_method_index" ON "payments" USING btree ("method");--> st
 CREATE INDEX "payments_status_index" ON "payments" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "payments_leaseId_index" ON "payments" USING btree ("leaseId");--> statement-breakpoint
 CREATE INDEX "payments_referenceCode_index" ON "payments" USING btree ("referenceCode");--> statement-breakpoint
+CREATE UNIQUE INDEX "permissionTemplates_name_organizationId_unique" ON "permissionTemplates" USING btree ("name","organizationId");--> statement-breakpoint
+CREATE INDEX "permissionTemplates_organizationId_index" ON "permissionTemplates" USING btree ("organizationId");--> statement-breakpoint
 CREATE UNIQUE INDEX "properties_organizationId_name_unique" ON "properties" USING btree ("organizationId","name");--> statement-breakpoint
 CREATE INDEX "properties_organizationId_index" ON "properties" USING btree ("organizationId");--> statement-breakpoint
 CREATE INDEX "properties_createdByUserId_index" ON "properties" USING btree ("createdByUserId");--> statement-breakpoint

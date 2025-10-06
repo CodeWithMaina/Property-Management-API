@@ -17,16 +17,54 @@
 // const db = drizzle(client,{schema, logger:true});
 // export default db;
 
+// import "dotenv/config";
+// import { neon } from "@neondatabase/serverless"
+// import { drizzle } from "drizzle-orm/neon-http"
+// import * as schema from  "./schema";
+
+// if (!process.env.DATABASE_URL) {
+//   throw new Error("DATABASE_URL is not defined in environment variables");
+// }
+
+// const client = neon(process.env.DATABASE_URL);
+// const db = drizzle(client, { schema, logger: true });
+
+// export default db;
+
+
+// src/drizzle/db.ts
 import "dotenv/config";
-import { neon } from "@neondatabase/serverless"
-import { drizzle } from "drizzle-orm/neon-http"
-import * as schema from  "./schema";
+import { Pool } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-serverless";
+import * as schema from "./schema";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is not defined in environment variables");
 }
 
-const client = neon(process.env.DATABASE_URL);
-const db = drizzle(client, { schema, logger: true });
+// Create a connection pool
+const pool = new Pool({ 
+  connectionString: process.env.DATABASE_URL,
+  // Optional: configure pool settings
+  max: 20, // maximum number of clients in the pool
+  idleTimeoutMillis: 30000, // how long a client is allowed to remain idle before being closed
+  connectionTimeoutMillis: 2000, // how long to wait for a connection
+});
+
+const db = drizzle(pool, { 
+  schema, 
+  logger: true 
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  await pool.end();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  await pool.end();
+  process.exit(0);
+});
 
 export default db;

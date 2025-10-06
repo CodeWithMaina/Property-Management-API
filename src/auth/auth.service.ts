@@ -1,160 +1,224 @@
 // auth.service.ts
-import { eq, and, gt } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import db from "../drizzle/db";
-import { users, userAuth, refreshTokens } from "../drizzle/schema";
 import { 
-  TCreateUserData, 
-  TCreateRefreshTokenData 
-} from "./auth.types";
+  users, userAuth, refreshTokens, organizations, 
+  userOrganizations
+} from "../drizzle/schema";
 import bcrypt from "bcrypt";
+import { TUserWithAuth, TUserAuth } from "./auth.types";
 
-// Create a new user with authentication
-export const createUserService = async (userData: TCreateUserData): Promise<string> => {
-  const { password, ...userInfo } = userData;
-  
-  // Create user first
-  const [newUser] = await db.insert(users)
-    .values({
-      fullName: userInfo.name,
-      email: userInfo.email,
-      phone: userInfo.phone || null,
-    })
-    .returning();
+/**
+ * 🆕 Create a new user with organization
+ */
+export const createUserServices = async (userData: {
+  fullName: string;
+  email: string;
+  phone?: string;
+  password: string;
+  organizationName?: string;
+}): Promise<{ user: any; organization: any }> => {
+  return await db.transaction(async (tx) => {
+    // Create user
+    const [user] = await tx.insert(users)
+      .values({
+        fullName: userData.fullName,
+        email: userData.email,
+        phone: userData.phone,
+      })
+      .returning();
 
-  // Hash password
-  const salt = bcrypt.genSaltSync(10);
-  const hashedPassword = bcrypt.hashSync(password, salt);
+    // Hash password and create auth record
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(userData.password, salt);
+    
+    await tx.insert(userAuth)
+      .values({
+        userId: user.id,
+        email: userData.email,
+        passwordHash: hashedPassword,
+      });
 
-  // Create user auth record
-  await db.insert(userAuth)
-    .values({
-      userId: newUser.id,
-      email: userInfo.email,
-      passwordHash: hashedPassword,
-    });
+    // Create organization if provided
+    let organization;
+    if (userData.organizationName) {
+      [organization] = await tx.insert(organizations)
+        .values({
+          name: userData.organizationName,
+          legalName: userData.organizationName,
+        })
+        .returning();
 
-  return "User created successfully";
+      // Link user to organization as admin
+      await tx.insert(userOrganizations)
+        .values({
+          userId: user.id,
+          organizationId: organization.id,
+          role: "admin",
+          isPrimary: true,
+          permissions: {
+            canManageProperties: true,
+            canCreateProperties: true,
+            canDeleteProperties: true,
+            canManageUsers: true,
+            canInviteUsers: true,
+            canRemoveUsers: true,
+            canChangeUserRoles: true,
+            canManageOrganizationSettings: true,
+          }
+        });
+    }
+
+    return { user, organization };
+  });
 };
 
-// Get user by email
-export const getUserByEmailService = async (email: string) => {
-  return await db.query.users.findFirst({
+/**
+ * 🎯 Type guard to validate user with auth data
+ */
+export const isUserWithAuth = (user: any): user is TUserWithAuth => {
+  return user && typeof user === 'object' && 'id' in user && 'email' in user;
+};
+
+/**
+ * 🎯 Helper function to transform database result to TUserWithAuth
+ */
+const transformUserWithAuth = (dbUser: any): TUserWithAuth | undefined => {
+  if (!dbUser) return undefined;
+
+  return {
+    ...dbUser,
+    userAuth: dbUser.userAuth?.[0] as TUserAuth | undefined,
+    userOrganizations: dbUser.userOrganizations || []
+  };
+};
+
+/**
+ * 📧 Get user by email with auth and organization data
+ */
+export const getUserByEmailService = async (
+  email: string
+): Promise<TUserWithAuth | undefined> => {
+  const result = await db.query.users.findFirst({
     where: eq(users.email, email),
     with: {
       userAuth: true,
       userOrganizations: {
         with: {
-          organization: true,
-        },
-      },
-    },
+          organization: true
+        }
+      }
+    }
   });
+  
+  return transformUserWithAuth(result);
 };
 
-// Get user by ID
-export const getUserByIdService = async (id: string) => {
-  return await db.query.users.findFirst({
+/**
+ * 🔍 Get user by ID with auth and organization data
+ */
+export const getUserByIdService = async (
+  id: string
+): Promise<TUserWithAuth | undefined> => {
+  const result = await db.query.users.findFirst({
     where: eq(users.id, id),
     with: {
       userAuth: true,
       userOrganizations: {
         with: {
-          organization: true,
-        },
-      },
-    },
+          organization: true
+        }
+      }
+    }
   });
+  
+  return transformUserWithAuth(result);
 };
 
-// Update user password
+/**
+ * 🔑 Update user password
+ */
 export const updateUserPasswordService = async (
   email: string, 
   newPassword: string
-): Promise<string> => {
+): Promise<void> => {
   const salt = bcrypt.genSaltSync(10);
   const hashedPassword = bcrypt.hashSync(newPassword, salt);
 
-  const result = await db.update(userAuth)
+  await db.update(userAuth)
     .set({ 
       passwordHash: hashedPassword,
       resetToken: null,
       resetTokenExpiresAt: null 
     })
-    .where(eq(userAuth.email, email))
-    .returning();
-
-  if (result.length === 0) {
-    throw new Error("User not found or password update failed");
-  }
-  
-  return "Password updated successfully";
-};
-
-// Set password reset token
-export const setPasswordResetTokenService = async (
-  email: string,
-  resetToken: string,
-  expiresAt: Date
-): Promise<void> => {
-  await db.update(userAuth)
-    .set({ 
-      resetToken,
-      resetTokenExpiresAt: expiresAt
-    })
     .where(eq(userAuth.email, email));
 };
 
-// Verify reset token
-export const verifyResetTokenService = async (
-  email: string,
-  token: string
-): Promise<boolean> => {
-  const result = await db.query.userAuth.findFirst({
-    where: and(
-      eq(userAuth.email, email),
-      eq(userAuth.resetToken, token),
-      gt(userAuth.resetTokenExpiresAt, new Date())
-    ),
-  });
+/**
+ * 💾 Store refresh token
+ */
+export const storeRefreshTokenService = async (
+  userId: string,
+  token: string,
+  deviceId?: string,
+  userAgent?: string,
+  ipAddress?: string
+): Promise<void> => {
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30); // 30 days expiry
 
-  return !!result;
+  await db.insert(refreshTokens)
+    .values({
+      userId,
+      token,
+      deviceId,
+      userAgent,
+      ipAddress,
+      expiresAt,
+    });
 };
 
-// Create refresh token
-export const createRefreshTokenService = async (
-  data: TCreateRefreshTokenData
-): Promise<string> => {
-  const [refreshToken] = await db.insert(refreshTokens)
-    .values(data)
-    .returning();
-  
-  return refreshToken.token;
-};
-
-// Get refresh token
-export const getRefreshTokenService = async (
-  token: string
-) => {
-  return await db.query.refreshTokens.findFirst({
+/**
+ * ✅ Verify refresh token
+ */
+export const verifyRefreshTokenService = async (
+  token: string,
+  deviceId?: string
+): Promise<{ isValid: boolean; userId?: string }> => {
+  const refreshToken = await db.query.refreshTokens.findFirst({
     where: and(
       eq(refreshTokens.token, token),
-      gt(refreshTokens.expiresAt, new Date()),
       eq(refreshTokens.isRevoked, false)
     ),
     with: {
-      user: {
-        with: {
-          userAuth: true,
-        },
-      },
-    },
+      user: true
+    }
   });
+
+  if (!refreshToken) {
+    return { isValid: false };
+  }
+
+  // Check expiration
+  if (new Date() > refreshToken.expiresAt) {
+    return { isValid: false };
+  }
+
+  // Optional device binding
+  if (deviceId && refreshToken.deviceId !== deviceId) {
+    return { isValid: false };
+  }
+
+  return { 
+    isValid: true, 
+    userId: refreshToken.userId 
+  };
 };
 
-// Revoke refresh token
-export const revokeRefreshTokenService = async (
-  token: string
-): Promise<void> => {
+/**
+ * 🚫 Revoke refresh token
+ */
+export const revokeRefreshTokenService = async (token: string): Promise<void> => {
   await db.update(refreshTokens)
     .set({ 
       isRevoked: true,
@@ -163,10 +227,10 @@ export const revokeRefreshTokenService = async (
     .where(eq(refreshTokens.token, token));
 };
 
-// Revoke all user refresh tokens
-export const revokeAllUserRefreshTokensService = async (
-  userId: string
-): Promise<void> => {
+/**
+ * 🚫 Revoke all user refresh tokens
+ */
+export const revokeAllUserRefreshTokensService = async (userId: string): Promise<void> => {
   await db.update(refreshTokens)
     .set({ 
       isRevoked: true,

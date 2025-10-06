@@ -56,6 +56,15 @@ export const getOrganizations = asyncHandler(
     const queryParams = OrganizationQuerySchema.parse(req.query);
     const userSession = getUserSession(req);
     
+    console.log("Get Organizations - User session:", {
+      userId: userSession.userId,
+      role: userSession.role,
+      organizations: userSession.organizations.map(org => ({
+        id: org.organizationId,
+        role: org.role
+      }))
+    });
+    
     // For non-admin users, only show organizations they belong to
     const userId = isAdmin(userSession) ? undefined : userSession.userId;
     
@@ -95,8 +104,19 @@ export const getOrganizationById = asyncHandler(
 
     const userSession = getUserSession(req);
     
+    console.log("Get Organization By ID - User session:", {
+      userId: userSession.userId,
+      role: userSession.role,
+      organizationId: organizationId,
+      userOrganizations: userSession.organizations.map(org => org.organizationId)
+    });
+    
     // Check if user has access to this organization
     if (!hasOrganizationAccess(userSession, organizationId)) {
+      console.warn("Access denied - User does not have access to organization:", {
+        userId: userSession.userId,
+        organizationId: organizationId
+      });
       throw new AuthorizationError("You don't have access to this organization");
     }
 
@@ -151,7 +171,7 @@ export const updateOrganization = asyncHandler(
       // For non-admins, check if they have manager role in this organization
       const userOrg = userSession.organizations.find(org => 
         org.organizationId === organizationId && 
-        (org.role === 'admin' || org.role === 'manager')
+        (org.role === 'admin' || org.role === 'manager' || org.role === 'propertyOwner')
       );
       
       if (!userOrg) {

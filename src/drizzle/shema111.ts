@@ -16,11 +16,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-// ========== ENUMS ==========
-
-/**
- * User role enumeration defining all possible user roles in the system
- */
+// ---------- Enums (camelCase) ----------
 export const userRoleEnum = pgEnum("userRoleEnum", [
   "tenant",
   "caretaker",
@@ -30,9 +26,6 @@ export const userRoleEnum = pgEnum("userRoleEnum", [
   "superAdmin",
 ]);
 
-/**
- * Unit status enumeration defining possible states of rental units
- */
 export const unitStatusEnum = pgEnum("unitStatusEnum", [
   "vacant",
   "reserved",
@@ -40,9 +33,6 @@ export const unitStatusEnum = pgEnum("unitStatusEnum", [
   "unavailable",
 ]);
 
-/**
- * Lease status enumeration defining lifecycle states of lease agreements
- */
 export const leaseStatusEnum = pgEnum("leaseStatusEnum", [
   "draft",
   "active",
@@ -52,9 +42,6 @@ export const leaseStatusEnum = pgEnum("leaseStatusEnum", [
   "cancelled",
 ]);
 
-/**
- * Invoice status enumeration defining states of financial invoices
- */
 export const invoiceStatusEnum = pgEnum("invoiceStatusEnum", [
   "draft",
   "issued",
@@ -64,9 +51,6 @@ export const invoiceStatusEnum = pgEnum("invoiceStatusEnum", [
   "overdue",
 ]);
 
-/**
- * Payment method enumeration defining supported payment methods
- */
 export const paymentMethodEnum = pgEnum("paymentMethodEnum", [
   "cash",
   "mpesa",
@@ -76,9 +60,6 @@ export const paymentMethodEnum = pgEnum("paymentMethodEnum", [
   "other",
 ]);
 
-/**
- * Payment status enumeration defining states of payment transactions
- */
 export const paymentStatusEnum = pgEnum("paymentStatusEnum", [
   "pending",
   "completed",
@@ -87,9 +68,6 @@ export const paymentStatusEnum = pgEnum("paymentStatusEnum", [
   "cancelled",
 ]);
 
-/**
- * Maintenance request status enumeration defining workflow states
- */
 export const maintenanceStatusEnum = pgEnum("maintenanceStatusEnum", [
   "open",
   "inProgress",
@@ -99,9 +77,6 @@ export const maintenanceStatusEnum = pgEnum("maintenanceStatusEnum", [
   "cancelled",
 ]);
 
-/**
- * Priority level enumeration for maintenance requests and other items
- */
 export const priorityEnum = pgEnum("priorityEnum", [
   "low",
   "medium",
@@ -109,9 +84,6 @@ export const priorityEnum = pgEnum("priorityEnum", [
   "urgent",
 ]);
 
-/**
- * Activity action enumeration defining all trackable user actions
- */
 export const activityActionEnum = pgEnum("activityActionEnum", [
   "create",
   "update",
@@ -128,11 +100,7 @@ export const activityActionEnum = pgEnum("activityActionEnum", [
   "permissionChange",
 ]);
 
-// ========== AUTHENTICATION TABLES ==========
-
-/**
- * User authentication table storing credentials and verification data
- */
+// ---------- Authentication Tables ----------
 export const userAuth = pgTable(
   "userAuth",
   {
@@ -167,9 +135,6 @@ export const userAuth = pgTable(
   ]
 );
 
-/**
- * Refresh tokens table for maintaining user sessions
- */
 export const refreshTokens = pgTable(
   "refreshTokens",
   {
@@ -197,9 +162,6 @@ export const refreshTokens = pgTable(
   ]
 );
 
-/**
- * MFA backup codes table for two-factor authentication fallback
- */
 export const mfaBackupCodes = pgTable(
   "mfaBackupCodes",
   {
@@ -220,9 +182,6 @@ export const mfaBackupCodes = pgTable(
   ]
 );
 
-/**
- * User invitation table for managing organization invites
- */
 export const invites = pgTable(
   "invites",
   {
@@ -255,11 +214,7 @@ export const invites = pgTable(
   ]
 );
 
-// ========== CORE USER & ORGANIZATION TABLES ==========
-
-/**
- * Main users table storing user profile information
- */
+// ---------- Core: Users & Organizations ----------
 export const users = pgTable(
   "users",
   {
@@ -284,9 +239,6 @@ export const users = pgTable(
   ]
 );
 
-/**
- * Organizations table for multi-tenant support
- */
 export const organizations = pgTable(
   "organizations",
   {
@@ -307,9 +259,6 @@ export const organizations = pgTable(
   (t) => [uniqueIndex("organizations_name_unique").on(t.name)]
 );
 
-/**
- * User-organization junction table with role and permissions
- */
 export const userOrganizations = pgTable(
   "userOrganizations",
   {
@@ -388,9 +337,6 @@ export const userOrganizations = pgTable(
   ]
 );
 
-/**
- * Organization settings table for configuration and feature flags
- */
 export const organizationSettings = pgTable(
   "organizationSettings",
   {
@@ -409,14 +355,13 @@ export const organizationSettings = pgTable(
       .notNull()
       .default(true),
     managerMaxProperties: integer("managerMaxProperties"),
-    // Security settings
-    mfaRequired: boolean("mfaRequired").default(false),
     // Global organization settings
     defaultCurrency: varchar("defaultCurrency", { length: 3 }).default("KES"),
     timezone: varchar("timezone", { length: 64 }).default("Africa/Nairobi"),
     invoiceDueDays: integer("invoiceDueDays").default(30),
     lateFeeEnabled: boolean("lateFeeEnabled").default(true),
     lateFeePercent: numeric("lateFeePercent", { precision: 5, scale: 2 }).default("5.00"),
+    mfaRequired: boolean("mfaRequired").default(false),
     createdAt: timestamp("createdAt", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -432,9 +377,6 @@ export const organizationSettings = pgTable(
   ]
 );
 
-/**
- * Permission templates for reusable permission sets
- */
 export const permissionTemplates = pgTable(
   "permissionTemplates",
   {
@@ -466,11 +408,7 @@ export const permissionTemplates = pgTable(
   ]
 );
 
-// ========== PROPERTY MANAGEMENT TABLES ==========
-
-/**
- * Properties table storing real estate property information
- */
+// ---------- Properties, Units, Amenities ----------
 export const properties = pgTable(
   "properties",
   {
@@ -510,9 +448,6 @@ export const properties = pgTable(
   ]
 );
 
-/**
- * Property managers junction table for property-level user assignments
- */
 export const propertyManagers = pgTable(
   "propertyManagers",
   {
@@ -530,6 +465,8 @@ export const propertyManagers = pgTable(
         canManageLeases?: boolean;
         canManageMaintenance?: boolean;
         canViewFinancials?: boolean;
+        canManageTenants?: boolean;
+        canIssueInvoices?: boolean;
       }>()
       .default({}),
     createdAt: timestamp("createdAt", { withTimezone: true })
@@ -549,9 +486,6 @@ export const propertyManagers = pgTable(
   ]
 );
 
-/**
- * Units table storing individual rental units within properties
- */
 export const units = pgTable(
   "units",
   {
@@ -585,9 +519,6 @@ export const units = pgTable(
   ]
 );
 
-/**
- * Amenities table for property and unit features
- */
 export const amenities = pgTable(
   "amenities",
   {
@@ -609,9 +540,6 @@ export const amenities = pgTable(
   ]
 );
 
-/**
- * Unit-amenities junction table for unit feature mapping
- */
 export const unitAmenities = pgTable(
   "unitAmenities",
   {
@@ -635,11 +563,7 @@ export const unitAmenities = pgTable(
   ]
 );
 
-// ========== LEASE MANAGEMENT TABLES ==========
-
-/**
- * Leases table storing rental agreement information
- */
+// ---------- Leases ----------
 export const leases = pgTable(
   "leases",
   {
@@ -688,11 +612,7 @@ export const leases = pgTable(
   ]
 );
 
-// ========== FINANCIAL MANAGEMENT TABLES ==========
-
-/**
- * Invoices table for rent and other charge billing
- */
+// ---------- Invoicing & Payments ----------
 export const invoices = pgTable(
   "invoices",
   {
@@ -743,9 +663,6 @@ export const invoices = pgTable(
   ]
 );
 
-/**
- * Invoice line items for detailed billing breakdown
- */
 export const invoiceItems = pgTable(
   "invoiceItems",
   {
@@ -768,9 +685,6 @@ export const invoiceItems = pgTable(
   (t) => [index("invoiceItems_invoiceId_index").on(t.invoiceId)]
 );
 
-/**
- * Payments table for tracking rent and other payments
- */
 export const payments = pgTable(
   "payments",
   {
@@ -814,9 +728,6 @@ export const payments = pgTable(
   ]
 );
 
-/**
- * Payment allocations for applying payments to specific invoices
- */
 export const paymentAllocations = pgTable(
   "paymentAllocations",
   {
@@ -844,9 +755,6 @@ export const paymentAllocations = pgTable(
   ]
 );
 
-/**
- * Receipts table for formal payment acknowledgment
- */
 export const receipts = pgTable(
   "receipts",
   {
@@ -874,11 +782,7 @@ export const receipts = pgTable(
   ]
 );
 
-// ========== MAINTENANCE MANAGEMENT TABLES ==========
-
-/**
- * Maintenance requests table for tracking repair and maintenance issues
- */
+// ---------- Maintenance ----------
 export const maintenanceRequests = pgTable(
   "maintenanceRequests",
   {
@@ -921,9 +825,6 @@ export const maintenanceRequests = pgTable(
   ]
 );
 
-/**
- * Maintenance comments for request communication and updates
- */
 export const maintenanceComments = pgTable(
   "maintenanceComments",
   {
@@ -946,9 +847,6 @@ export const maintenanceComments = pgTable(
   ]
 );
 
-/**
- * Maintenance attachments for supporting documents and images
- */
 export const maintenanceAttachments = pgTable(
   "maintenanceAttachments",
   {
@@ -971,11 +869,7 @@ export const maintenanceAttachments = pgTable(
   ]
 );
 
-// ========== AUDIT & ACTIVITY LOGGING ==========
-
-/**
- * Activity logs table for comprehensive audit trail
- */
+// ---------- Activity Log ----------
 export const activityLogs = pgTable(
   "activityLogs",
   {
@@ -1006,9 +900,7 @@ export const activityLogs = pgTable(
   ]
 );
 
-// ========== DATABASE RELATIONS ==========
-
-// User Relations
+// ---------- Relations (Drizzle) ----------
 export const usersRelations = relations(users, ({ many }) => ({
   userAuth: many(userAuth),
   refreshTokens: many(refreshTokens),
@@ -1016,73 +908,52 @@ export const usersRelations = relations(users, ({ many }) => ({
   userOrganizations: many(userOrganizations),
   propertyManagers: many(propertyManagers),
   maintenanceRequestsCreated: many(maintenanceRequests, {
-    relationName: "createdByUser",
+    relationName: "createdBy",
   }),
   maintenanceRequestsAssigned: many(maintenanceRequests, {
-    relationName: "assignedToUser",
+    relationName: "assignedTo",
   }),
   maintenanceComments: many(maintenanceComments),
-  leases: many(leases),
-  paymentsReceived: many(payments, { relationName: "receivedFromUser" }),
-  paymentsRecorded: many(payments, { relationName: "receivedByUser" }),
+  paymentsReceivedFrom: many(payments, { relationName: "receivedFrom" }),
+  paymentsReceivedBy: many(payments, { relationName: "receivedBy" }),
+  propertiesCreated: many(properties, { relationName: "createdBy" }),
+  leasesAsTenant: many(leases, { relationName: "tenant" }),
+  invitesSent: many(invites, { relationName: "invitedBy" }),
   activityLogs: many(activityLogs),
-  invitesSent: many(invites, { relationName: "invitedByUser" }),
 }));
 
-// UserAuth Relations
 export const userAuthRelations = relations(userAuth, ({ one }) => ({
-  user: one(users, {
-    fields: [userAuth.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [userAuth.userId], references: [users.id] }),
 }));
 
-// RefreshTokens Relations
 export const refreshTokensRelations = relations(refreshTokens, ({ one }) => ({
-  user: one(users, {
-    fields: [refreshTokens.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [refreshTokens.userId], references: [users.id] }),
 }));
 
-// MfaBackupCodes Relations
 export const mfaBackupCodesRelations = relations(mfaBackupCodes, ({ one }) => ({
-  user: one(users, {
-    fields: [mfaBackupCodes.userId],
-    references: [users.id],
-  }),
+  user: one(users, { fields: [mfaBackupCodes.userId], references: [users.id] }),
 }));
 
-// Invites Relations
-export const invitesRelations = relations(invites, ({ one }) => ({
-  organization: one(organizations, {
-    fields: [invites.organizationId],
-    references: [organizations.id],
-  }),
-  invitedByUser: one(users, {
-    fields: [invites.invitedByUserId],
-    references: [users.id],
-    relationName: "invitedByUser",
-  }),
-}));
+export const organizationsRelations = relations(
+  organizations,
+  ({ one, many }) => ({
+    userOrganizations: many(userOrganizations),
+    properties: many(properties),
+    amenities: many(amenities),
+    leases: many(leases),
+    invoices: many(invoices),
+    payments: many(payments),
+    receipts: many(receipts),
+    activityLogs: many(activityLogs),
+    settings: one(organizationSettings, {
+      fields: [organizations.id],
+      references: [organizationSettings.organizationId],
+    }),
+    permissionTemplates: many(permissionTemplates),
+    invites: many(invites),
+  })
+);
 
-// Organization Relations
-export const organizationsRelations = relations(organizations, ({ many }) => ({
-  userOrganizations: many(userOrganizations),
-  organizationSettings: many(organizationSettings),
-  permissionTemplates: many(permissionTemplates),
-  properties: many(properties),
-  leases: many(leases),
-  invoices: many(invoices),
-  payments: many(payments),
-  receipts: many(receipts),
-  maintenanceRequests: many(maintenanceRequests),
-  activityLogs: many(activityLogs),
-  invites: many(invites),
-  amenities: many(amenities),
-}));
-
-// UserOrganizations Relations
 export const userOrganizationsRelations = relations(
   userOrganizations,
   ({ one }) => ({
@@ -1097,7 +968,6 @@ export const userOrganizationsRelations = relations(
   })
 );
 
-// OrganizationSettings Relations
 export const organizationSettingsRelations = relations(
   organizationSettings,
   ({ one }) => ({
@@ -1108,7 +978,6 @@ export const organizationSettingsRelations = relations(
   })
 );
 
-// PermissionTemplates Relations
 export const permissionTemplatesRelations = relations(
   permissionTemplates,
   ({ one }) => ({
@@ -1119,23 +988,22 @@ export const permissionTemplatesRelations = relations(
   })
 );
 
-// Property Relations
-export const propertiesRelations = relations(properties, ({ many, one }) => ({
+export const propertiesRelations = relations(properties, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [properties.organizationId],
     references: [organizations.id],
   }),
-  createdByUser: one(users, {
+  createdBy: one(users, {
     fields: [properties.createdByUserId],
     references: [users.id],
+    relationName: "createdBy",
   }),
-  propertyManagers: many(propertyManagers),
   units: many(units),
-  leases: many(leases),
+  propertyManagers: many(propertyManagers),
   maintenanceRequests: many(maintenanceRequests),
+  leases: many(leases),
 }));
 
-// PropertyManagers Relations
 export const propertyManagersRelations = relations(
   propertyManagers,
   ({ one }) => ({
@@ -1150,8 +1018,7 @@ export const propertyManagersRelations = relations(
   })
 );
 
-// Unit Relations
-export const unitsRelations = relations(units, ({ many, one }) => ({
+export const unitsRelations = relations(units, ({ one, many }) => ({
   property: one(properties, {
     fields: [units.propertyId],
     references: [properties.id],
@@ -1161,8 +1028,7 @@ export const unitsRelations = relations(units, ({ many, one }) => ({
   maintenanceRequests: many(maintenanceRequests),
 }));
 
-// Amenities Relations
-export const amenitiesRelations = relations(amenities, ({ many, one }) => ({
+export const amenitiesRelations = relations(amenities, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [amenities.organizationId],
     references: [organizations.id],
@@ -1170,20 +1036,15 @@ export const amenitiesRelations = relations(amenities, ({ many, one }) => ({
   unitAmenities: many(unitAmenities),
 }));
 
-// UnitAmenities Relations
 export const unitAmenitiesRelations = relations(unitAmenities, ({ one }) => ({
-  unit: one(units, {
-    fields: [unitAmenities.unitId],
-    references: [units.id],
-  }),
+  unit: one(units, { fields: [unitAmenities.unitId], references: [units.id] }),
   amenity: one(amenities, {
     fields: [unitAmenities.amenityId],
     references: [amenities.id],
   }),
 }));
 
-// Lease Relations
-export const leasesRelations = relations(leases, ({ many, one }) => ({
+export const leasesRelations = relations(leases, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [leases.organizationId],
     references: [organizations.id],
@@ -1192,33 +1053,22 @@ export const leasesRelations = relations(leases, ({ many, one }) => ({
     fields: [leases.propertyId],
     references: [properties.id],
   }),
-  unit: one(units, {
-    fields: [leases.unitId],
-    references: [units.id],
-  }),
-  tenantUser: one(users, {
-    fields: [leases.tenantUserId],
-    references: [users.id],
-  }),
+  unit: one(units, { fields: [leases.unitId], references: [units.id] }),
+  tenant: one(users, { fields: [leases.tenantUserId], references: [users.id], relationName: "tenant" }),
   invoices: many(invoices),
   payments: many(payments),
 }));
 
-// Invoice Relations
-export const invoicesRelations = relations(invoices, ({ many, one }) => ({
+export const invoicesRelations = relations(invoices, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [invoices.organizationId],
     references: [organizations.id],
   }),
-  lease: one(leases, {
-    fields: [invoices.leaseId],
-    references: [leases.id],
-  }),
-  invoiceItems: many(invoiceItems),
-  paymentAllocations: many(paymentAllocations),
+  lease: one(leases, { fields: [invoices.leaseId], references: [leases.id] }),
+  items: many(invoiceItems),
+  allocations: many(paymentAllocations),
 }));
 
-// InvoiceItems Relations
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
   invoice: one(invoices, {
     fields: [invoiceItems.invoiceId],
@@ -1226,8 +1076,7 @@ export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
   }),
 }));
 
-// Payment Relations
-export const paymentsRelations = relations(payments, ({ many, one }) => ({
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
   organization: one(organizations, {
     fields: [payments.organizationId],
     references: [organizations.id],
@@ -1236,21 +1085,20 @@ export const paymentsRelations = relations(payments, ({ many, one }) => ({
     fields: [payments.leaseId],
     references: [leases.id],
   }),
-  receivedFromUser: one(users, {
+  receivedFrom: one(users, {
     fields: [payments.receivedFromUserId],
     references: [users.id],
-    relationName: "receivedFromUser",
+    relationName: "receivedFrom",
   }),
-  receivedByUser: one(users, {
+  receivedBy: one(users, {
     fields: [payments.receivedByUserId],
     references: [users.id],
-    relationName: "receivedByUser",
+    relationName: "receivedBy",
   }),
-  paymentAllocations: many(paymentAllocations),
-  receipts: many(receipts),
+  allocations: many(paymentAllocations),
+  receipt: many(receipts),
 }));
 
-// PaymentAllocations Relations
 export const paymentAllocationsRelations = relations(
   paymentAllocations,
   ({ one }) => ({
@@ -1265,7 +1113,6 @@ export const paymentAllocationsRelations = relations(
   })
 );
 
-// Receipt Relations
 export const receiptsRelations = relations(receipts, ({ one }) => ({
   organization: one(organizations, {
     fields: [receipts.organizationId],
@@ -1277,10 +1124,9 @@ export const receiptsRelations = relations(receipts, ({ one }) => ({
   }),
 }));
 
-// MaintenanceRequest Relations
 export const maintenanceRequestsRelations = relations(
   maintenanceRequests,
-  ({ many, one }) => ({
+  ({ one, many }) => ({
     organization: one(organizations, {
       fields: [maintenanceRequests.organizationId],
       references: [organizations.id],
@@ -1293,22 +1139,21 @@ export const maintenanceRequestsRelations = relations(
       fields: [maintenanceRequests.unitId],
       references: [units.id],
     }),
-    createdByUser: one(users, {
+    createdBy: one(users, {
       fields: [maintenanceRequests.createdByUserId],
       references: [users.id],
-      relationName: "createdByUser",
+      relationName: "createdBy",
     }),
-    assignedToUser: one(users, {
+    assignedTo: one(users, {
       fields: [maintenanceRequests.assignedToUserId],
       references: [users.id],
-      relationName: "assignedToUser",
+      relationName: "assignedTo",
     }),
-    maintenanceComments: many(maintenanceComments),
-    maintenanceAttachments: many(maintenanceAttachments),
+    comments: many(maintenanceComments),
+    attachments: many(maintenanceAttachments),
   })
 );
 
-// MaintenanceComments Relations
 export const maintenanceCommentsRelations = relations(
   maintenanceComments,
   ({ one }) => ({
@@ -1316,14 +1161,13 @@ export const maintenanceCommentsRelations = relations(
       fields: [maintenanceComments.maintenanceRequestId],
       references: [maintenanceRequests.id],
     }),
-    authorUser: one(users, {
+    author: one(users, {
       fields: [maintenanceComments.authorUserId],
       references: [users.id],
     }),
   })
 );
 
-// MaintenanceAttachments Relations
 export const maintenanceAttachmentsRelations = relations(
   maintenanceAttachments,
   ({ one }) => ({
@@ -1334,52 +1178,30 @@ export const maintenanceAttachmentsRelations = relations(
   })
 );
 
-// ActivityLogs Relations
 export const activityLogsRelations = relations(activityLogs, ({ one }) => ({
   organization: one(organizations, {
     fields: [activityLogs.organizationId],
     references: [organizations.id],
   }),
-  actorUser: one(users, {
+  actor: one(users, {
     fields: [activityLogs.actorUserId],
     references: [users.id],
   }),
 }));
 
-// ========== INFERRED TYPES ==========
+export const invitesRelations = relations(invites, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [invites.organizationId],
+    references: [organizations.id],
+  }),
+  invitedBy: one(users, {
+    fields: [invites.invitedByUserId],
+    references: [users.id],
+    relationName: "invitedBy",
+  }),
+}));
 
-// Core Types
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-
-export type Organization = typeof organizations.$inferSelect;
-export type NewOrganization = typeof organizations.$inferInsert;
-
-export type UserOrganization = typeof userOrganizations.$inferSelect;
-export type NewUserOrganization = typeof userOrganizations.$inferInsert;
-
-export type Property = typeof properties.$inferSelect;
-export type NewProperty = typeof properties.$inferInsert;
-
-export type Unit = typeof units.$inferSelect;
-export type NewUnit = typeof units.$inferInsert;
-
-export type Lease = typeof leases.$inferSelect;
-export type NewLease = typeof leases.$inferInsert;
-
-export type Invoice = typeof invoices.$inferSelect;
-export type NewInvoice = typeof invoices.$inferInsert;
-
-export type Payment = typeof payments.$inferSelect;
-export type NewPayment = typeof payments.$inferInsert;
-
-export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
-export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
-
-export type ActivityLog = typeof activityLogs.$inferSelect;
-export type NewActivityLog = typeof activityLogs.$inferInsert;
-
-// Authentication Types
+// ---------- Inferred Types ----------
 export type UserAuth = typeof userAuth.$inferSelect;
 export type NewUserAuth = typeof userAuth.$inferInsert;
 
@@ -1389,19 +1211,36 @@ export type NewRefreshToken = typeof refreshTokens.$inferInsert;
 export type MfaBackupCode = typeof mfaBackupCodes.$inferSelect;
 export type NewMfaBackupCode = typeof mfaBackupCodes.$inferInsert;
 
-export type Invite = typeof invites.$inferSelect;
-export type NewInvite = typeof invites.$inferInsert;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
 
-// Organization Types
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
+
+export type UserOrganization = typeof userOrganizations.$inferSelect;
+export type NewUserOrganization = typeof userOrganizations.$inferInsert;
+
 export type OrganizationSettings = typeof organizationSettings.$inferSelect;
 export type NewOrganizationSettings = typeof organizationSettings.$inferInsert;
 
 export type PermissionTemplate = typeof permissionTemplates.$inferSelect;
 export type NewPermissionTemplate = typeof permissionTemplates.$inferInsert;
 
-// Property Management Types
+export type UserOrganizationPermissions = NonNullable<
+  UserOrganization["permissions"]
+>;
+export type PropertyManagerPermissions = NonNullable<
+  PropertyManager["permissions"]
+>;
+
+export type Property = typeof properties.$inferSelect;
+export type NewProperty = typeof properties.$inferInsert;
+
 export type PropertyManager = typeof propertyManagers.$inferSelect;
 export type NewPropertyManager = typeof propertyManagers.$inferInsert;
+
+export type Unit = typeof units.$inferSelect;
+export type NewUnit = typeof units.$inferInsert;
 
 export type Amenity = typeof amenities.$inferSelect;
 export type NewAmenity = typeof amenities.$inferInsert;
@@ -1409,9 +1248,17 @@ export type NewAmenity = typeof amenities.$inferInsert;
 export type UnitAmenity = typeof unitAmenities.$inferSelect;
 export type NewUnitAmenity = typeof unitAmenities.$inferInsert;
 
-// Financial Types
+export type Lease = typeof leases.$inferSelect;
+export type NewLease = typeof leases.$inferInsert;
+
+export type Invoice = typeof invoices.$inferSelect;
+export type NewInvoice = typeof invoices.$inferInsert;
+
 export type InvoiceItem = typeof invoiceItems.$inferSelect;
 export type NewInvoiceItem = typeof invoiceItems.$inferInsert;
+
+export type Payment = typeof payments.$inferSelect;
+export type NewPayment = typeof payments.$inferInsert;
 
 export type PaymentAllocation = typeof paymentAllocations.$inferSelect;
 export type NewPaymentAllocation = typeof paymentAllocations.$inferInsert;
@@ -1419,30 +1266,29 @@ export type NewPaymentAllocation = typeof paymentAllocations.$inferInsert;
 export type Receipt = typeof receipts.$inferSelect;
 export type NewReceipt = typeof receipts.$inferInsert;
 
-// Maintenance Types
+export type MaintenanceRequest = typeof maintenanceRequests.$inferSelect;
+export type NewMaintenanceRequest = typeof maintenanceRequests.$inferInsert;
+
 export type MaintenanceComment = typeof maintenanceComments.$inferSelect;
 export type NewMaintenanceComment = typeof maintenanceComments.$inferInsert;
 
 export type MaintenanceAttachment = typeof maintenanceAttachments.$inferSelect;
-export type NewMaintenanceAttachment = typeof maintenanceAttachments.$inferInsert;
+export type NewMaintenanceAttachment =
+  typeof maintenanceAttachments.$inferInsert;
 
-// Permission Types
-export type UserOrganizationPermissions = NonNullable<
-  UserOrganization["permissions"]
->;
+export type ActivityLog = typeof activityLogs.$inferSelect;
+export type NewActivityLog = typeof activityLogs.$inferInsert;
 
-export type PropertyManagerPermissions = NonNullable<
-  PropertyManager["permissions"]
->;
+export type Invite = typeof invites.$inferSelect;
+export type NewInvite = typeof invites.$inferInsert;
 
-// ========== ENUM TYPES ==========
-
-export type UserRole = (typeof userRoleEnum.enumValues)[number];
-export type UnitStatus = (typeof unitStatusEnum.enumValues)[number];
-export type LeaseStatus = (typeof leaseStatusEnum.enumValues)[number];
-export type InvoiceStatus = (typeof invoiceStatusEnum.enumValues)[number];
-export type PaymentMethod = (typeof paymentMethodEnum.enumValues)[number];
-export type PaymentStatus = (typeof paymentStatusEnum.enumValues)[number];
-export type MaintenanceStatus = (typeof maintenanceStatusEnum.enumValues)[number];
-export type Priority = (typeof priorityEnum.enumValues)[number];
-export type ActivityAction = (typeof activityActionEnum.enumValues)[number];
+export type UserRoleEnum = (typeof userRoleEnum.enumValues)[number];
+export type ActivityActionEnum = (typeof activityActionEnum.enumValues)[number];
+export type UnitStatusEnum = (typeof unitStatusEnum.enumValues)[number];
+export type LeaseStatusEnum = (typeof leaseStatusEnum.enumValues)[number];
+export type InvoiceStatusEnum = (typeof invoiceStatusEnum.enumValues)[number];
+export type PaymentMethodEnum = (typeof paymentMethodEnum.enumValues)[number];
+export type PaymentStatusEnum = (typeof paymentStatusEnum.enumValues)[number];
+export type MaintenanceStatusEnum =
+  (typeof maintenanceStatusEnum.enumValues)[number];
+export type PriorityEnum = (typeof priorityEnum.enumValues)[number];

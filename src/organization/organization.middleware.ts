@@ -14,8 +14,20 @@ export const requireOrganizationAccess = (requiredRole?: string) => {
       );
     }
 
+    console.log("Organization Middleware - Checking access:", {
+      userId: userSession.userId,
+      organizationId: organizationId,
+      userRole: userSession.role,
+      requiredRole: requiredRole,
+      userOrganizations: userSession.organizations.map(org => ({
+        organizationId: org.organizationId,
+        role: org.role
+      }))
+    });
+
     // Admins have full access
     if (userSession.role === 'admin' || userSession.role === 'superAdmin') {
+      console.log("Organization Middleware - Admin access granted");
       return next();
     }
 
@@ -25,6 +37,10 @@ export const requireOrganizationAccess = (requiredRole?: string) => {
     );
 
     if (!userOrg) {
+      console.warn("Organization Middleware - No access to organization:", {
+        userId: userSession.userId,
+        organizationId: organizationId
+      });
       return res.status(403).json(
         createErrorResponse("No access to this organization", "AUTHORIZATION_ERROR")
       );
@@ -32,11 +48,17 @@ export const requireOrganizationAccess = (requiredRole?: string) => {
 
     // Check role requirement if specified
     if (requiredRole && userOrg.role !== requiredRole) {
+      console.warn("Organization Middleware - Insufficient role:", {
+        userId: userSession.userId,
+        userRole: userOrg.role,
+        requiredRole: requiredRole
+      });
       return res.status(403).json(
         createErrorResponse(`Required role: ${requiredRole}`, "AUTHORIZATION_ERROR")
       );
     }
 
+    console.log("Organization Middleware - Access granted");
     next();
   };
 };

@@ -1,517 +1,412 @@
 // auth.controller.ts
 import { Request, Response, RequestHandler } from "express";
 import bcrypt from "bcrypt";
-import jwt, { JwtPayload } from "jsonwebtoken";
-import { v4 as uuidv4 } from "uuid";
-import { z, ZodError } from "zod";
-
+import jwt from "jsonwebtoken";
+import { z } from "zod";
 import {
-  createUserService,
+  createUserServices,
   getUserByEmailService,
   updateUserPasswordService,
-  setPasswordResetTokenService,
-  verifyResetTokenService,
-  createRefreshTokenService,
-  getRefreshTokenService,
+  storeRefreshTokenService,
   revokeRefreshTokenService,
   revokeAllUserRefreshTokensService,
-  getUserByIdService,
 } from "./auth.service";
-
 import { sendNotificationEmail } from "../middleware/googleMailer";
-import {
-  registerSchema,
-  loginSchema,
-  refreshTokenSchema,
-  forgotPasswordSchema,
-  resetPasswordSchema,
-  changePasswordSchema,
-} from "./auth.validator";
+import { createUserSchema, loginSchema, passwordResetRequestSchema, passwordResetSchema, refreshTokenSchema } from "./auth.schema";
+import { TUserWithAuth } from "./auth.types";
+import { formatZodError } from "../utils/formatZodError";
 
-import { TAuthResponse, TJwtPayload, TUserSession } from "./auth.types";
-
-// Helper function to format Zod errors safely
-const formatZodError = (error: ZodError) => {
-  return {
-    error: "Validation failed",
-    details: error.issues.map((issue) => ({
-      path: issue.path.join("."),
-      message: issue.message,
-    })),
-  };
-};
-
-// Generate JWT token with proper typing
-const generateToken = (payload: TJwtPayload): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is not set");
+/**
+ * 🎯 Helper function to verify password with proper typing
+ */
+const verifyPassword = (password: string, user: TUserWithAuth): boolean => {
+  if (!user.userAuth?.passwordHash) {
+    return false;
   }
-
-  const expiresIn = process.env.JWT_EXPIRES_IN || "1h";
-  
-  return jwt.sign(payload, secret, { expiresIn });
+  return bcrypt.compareSync(password, user.userAuth.passwordHash);
 };
 
-// Generate password reset token
-const generateResetToken = (email: string): string => {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) {
-    throw new Error("JWT_SECRET environment variable is not set");
-  }
-
-  return jwt.sign(
-    { email, purpose: "password_reset" },
-    secret,
-    { expiresIn: "1h" }
-  );
-};
-
-// Generate refresh token
-const generateRefreshToken = (): string => {
-  return uuidv4() + uuidv4(); // Double UUID for length
-};
-
-// Register new user
-export const register: RequestHandler = async (req: Request, res: Response) => {
+/**
+ * 🆕 User Registration
+ */
+export const createUser: RequestHandler = async (
+  req: Request,
+  res: Response
+) => {
   try {
     // Validate input
-    const validatedData = registerSchema.parse(req.body);
+    const validatedData = createUserSchema.parse(req.body);
+    const userEmail = validatedData.email;
 
-    // Check if user already exists
-    const existingUser = await getUserByEmailService(validatedData.email);
+    // Check for existing user
+    const existingUser = await getUserByEmailService(userEmail);
     if (existingUser) {
       return res
         .status(400)
         .json({ error: "User with this email already exists" });
     }
 
-    // Create user
-    await createUserService(validatedData);
+    // Create user and organization
+    const { user, organization } = await createUserServices(validatedData);
 
     // Send welcome email
-    try {
-      await sendNotificationEmail(
-        validatedData.email,
-        validatedData.name,
-        "Account created successfully",
-        "Welcome to our property management system"
-      );
-    } catch (emailError) {
-      console.error("Failed to send welcome email:", emailError);
-      // Continue even if email fails
+    const emailResult = await sendNotificationEmail(
+      validatedData.email,
+      validatedData.fullName,
+      "Account created successfully",
+      "Welcome to our property management system!</b>"
+    );
+
+    if (!emailResult) {
+      console.error("Failed to send notification email");
     }
 
-    res.status(201).json({ message: "User created successfully" });
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(500).json({ error: "Failed to create user" });
-  }
-};
-
-// Login user
-export const login: RequestHandler = async (req: Request, res: Response) => {
-  try {
-    const validatedData = loginSchema.parse(req.body);
-    const { email, password } = validatedData;
-
-    // Get user with auth info
-    const user = await getUserByEmailService(email);
-    if (!user || !user.userAuth || user.userAuth.length === 0) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({ error: "Account is deactivated" });
-    }
-
-    // Compare passwords
-    const userAuth = user.userAuth[0];
-    const isMatch = bcrypt.compareSync(password, userAuth.passwordHash);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Generate tokens with proper structure
-    const tokenPayload: TJwtPayload = {
-      userId: user.id,
-      email: user.email,
-      role: user.userOrganizations[0]?.role || "tenant",
-    };
-
-    const token = generateToken(tokenPayload);
-    const refreshToken = generateRefreshToken();
-
-    // Save refresh token
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
-
-    await createRefreshTokenService({
-      userId: user.id,
-      token: refreshToken,
-      deviceId: req.headers["user-agent"] || undefined,
-      userAgent: req.headers["user-agent"] || undefined,
-      ipAddress: req.ip || undefined,
-      expiresAt,
-    });
-
-    // Prepare response
-    const authResponse: TAuthResponse = {
-      token,
-      refreshToken,
+    res.status(201).json({
+      message: "User created successfully",
       user: {
         id: user.id,
-        name: user.fullName,
+        fullName: user.fullName,
         email: user.email,
-        role: user.userOrganizations[0]?.role || "tenant",
-        phone: user.phone || undefined,
       },
-    };
-
-    res.status(200).json(authResponse);
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
+      organization: organization
+        ? {
+            id: organization.id,
+            name: organization.name,
+          }
+        : null,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: "Validation failed",
+        details: formatZodError(error)
+      });
     }
-    
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(500).json({ error: "Failed to login" });
+    console.error("Create user error:", error);
+    res.status(500).json({ error: error.message || "Failed to create user" });
   }
 };
 
-// Logout user
-export const logout: RequestHandler = async (req: Request, res: Response) => {
-  try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authorization token required" });
-    }
-
-    const token = authHeader.substring(7);
-    
-    // Verify token to get user ID
-    let decoded: any;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET as string);
-    } catch (jwtError) {
-      // If token is invalid/expired, still return success for logout
-      console.warn("JWT verification failed during logout:", jwtError);
-      return res.status(200).json({ message: "Logged out successfully" });
-    }
-
-    // Revoke all user refresh tokens if we have a valid user ID
-    if (decoded && decoded.userId) {
-      await revokeAllUserRefreshTokensService(decoded.userId);
-    }
-
-    res.status(200).json({ message: "Logged out successfully" });
-  } catch (error: unknown) {
-    console.error("Logout error:", error);
-    // Even if there's an error, return success for logout
-    res.status(200).json({ message: "Logged out successfully" });
-  }
-};
-
-// Get current user profile - Fixed version
-export const getCurrentUser: RequestHandler = async (
+/**
+ * 🔑 User Login
+ */
+export const loginUser: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const userSession = (req as any).user; // This should be set by auth middleware
+    const validatedData = loginSchema.parse(req.body);
+    const { email, password, deviceId, userAgent } = validatedData;
 
-    if (!userSession || !userSession.userId) {
-      return res.status(401).json({ error: "Authentication required" });
+    // Get user with auth data
+    const user = await getUserByEmailService(email);
+    if (!user) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Use the data already loaded by the auth middleware
+    if (!user.isActive) {
+      return res.status(401).json({ error: "Account deactivated" });
+    }
+
+    if (!user.userAuth) {
+      return res.status(401).json({ error: "Authentication data not found" });
+    }
+
+    // Verify password using helper function
+    const isPasswordValid = verifyPassword(password, user);
+    if (!isPasswordValid) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    // Check email verification
+    // if (!user.userAuth.isEmailVerified) {
+    //   return res.status(403).json({
+    //     error: "Email verification required",
+    //     requiresVerification: true,
+    //   });
+    // }
+
+    // Get user's organizations and permissions
+    const userOrgs = user.userOrganizations || [];
+    const primaryOrg = userOrgs.find((org) => org.isPrimary);
+
+    // Generate access token
+    const accessTokenPayload = {
+      userId: user.id,
+      email: user.email,
+      orgId: primaryOrg?.organizationId,
+      roles: userOrgs.map((org) => org.role),
+      permissions: primaryOrg?.permissions || {},
+      deviceId,
+    };
+
+    const accessToken = jwt.sign(
+      accessTokenPayload,
+      process.env.JWT_SECRET as string,
+      { expiresIn: "15m" } // Short-lived access token
+    );
+
+    // Generate refresh token
+    const refreshToken = jwt.sign(
+      { userId: user.id, deviceId },
+      process.env.JWT_REFRESH_SECRET as string,
+      { expiresIn: "30d" }
+    );
+
+    // Store refresh token
+    await storeRefreshTokenService(
+      user.id,
+      refreshToken,
+      deviceId,
+      userAgent,
+      req.ip
+    );
+
+    // Update last login
+    // This would be implemented in your service layer
+
     res.status(200).json({
+      accessToken,
+      refreshToken,
       user: {
-        id: userSession.user.id,
-        name: userSession.user.fullName,
-        email: userSession.user.email,
-        role: userSession.role,
-        phone: userSession.user.phone || undefined,
-        createdAt: userSession.user.createdAt,
-        organizations: userSession.organizations,
-        managedProperties: userSession.managedProperties,
+        id: user.id,
+        fullName: user.fullName,
+        email: user.email,
+        organizations: userOrgs.map((org) => ({
+          id: org.organizationId,
+          role: org.role,
+          isPrimary: org.isPrimary,
+          permissions: org.permissions,
+        })),
       },
+      expiresIn: 15 * 60, // 15 minutes in seconds
     });
-  } catch (error: unknown) {
-    console.error("Get current user error:", error);
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: "Validation failed",
+        details: formatZodError(error)
+      });
     }
-    
-    res.status(500).json({ error: "Failed to get user profile" });
+    console.error("Login error:", error);
+    res.status(500).json({ error: error.message || "Failed to login" });
   }
-}
+};
 
-// Refresh token
+/**
+ * 🔄 Refresh Access Token
+ */
 export const refreshToken: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
     const validatedData = refreshTokenSchema.parse(req.body);
-    const { refreshToken } = validatedData;
+    const { refreshToken, deviceId } = validatedData;
 
-    // Get refresh token from database
-    const storedToken = await getRefreshTokenService(refreshToken);
-    if (!storedToken) {
-      return res
-        .status(401)
-        .json({ error: "Invalid or expired refresh token" });
+    // Verify refresh token (middleware already validated it)
+    if (!req.user) {
+      return res.status(401).json({ error: "Invalid refresh token" });
     }
 
-    // Get user
-    const user = await getUserByIdService(storedToken.userId);
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: "User not found or deactivated" });
-    }
+    const user = req.user;
 
-    // Generate new tokens
-    const tokenPayload: TJwtPayload = {
+    // Generate new access token
+    const userOrgs = user.userOrganizations || [];
+    const primaryOrg = userOrgs.find((org) => org.isPrimary);
+
+    const accessTokenPayload = {
       userId: user.id,
       email: user.email,
-      role: user.userOrganizations[0]?.role || "tenant",
+      orgId: primaryOrg?.organizationId,
+      roles: userOrgs.map((org) => org.role),
+      permissions: primaryOrg?.permissions || {},
+      deviceId,
     };
 
-    const newToken = generateToken(tokenPayload);
-    const newRefreshToken = generateRefreshToken();
+    const newAccessToken = jwt.sign(
+      accessTokenPayload,
+      process.env.JWT_SECRET as string,
+      { expiresIn: "15m" }
+    );
 
-    // Revoke old refresh token
+    // Optionally rotate refresh token for security
+    const newRefreshToken = jwt.sign(
+      { userId: user.id, deviceId },
+      process.env.JWT_REFRESH_SECRET as string,
+      { expiresIn: "30d" }
+    );
+
+    // Store new refresh token and revoke old one
+    await storeRefreshTokenService(
+      user.id,
+      newRefreshToken,
+      deviceId,
+      req.get("User-Agent"),
+      req.ip
+    );
     await revokeRefreshTokenService(refreshToken);
 
-    // Save new refresh token
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days expiration
-
-    await createRefreshTokenService({
-      userId: user.id,
-      token: newRefreshToken,
-      deviceId: req.headers["user-agent"] || undefined,
-      userAgent: req.headers["user-agent"] || undefined,
-      ipAddress: req.ip || undefined,
-      expiresAt,
-    });
-
-    // Prepare response
-    const authResponse: TAuthResponse = {
-      token: newToken,
+    res.status(200).json({
+      accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      user: {
-        id: user.id,
-        name: user.fullName,
-        email: user.email,
-        role: user.userOrganizations[0]?.role || "tenant",
-        phone: user.phone || undefined,
-      },
-    };
-
-    res.status(200).json(authResponse);
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
+      expiresIn: 15 * 60,
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: "Validation failed",
+        details: formatZodError(error)
+      });
     }
-    
-    if (error instanceof Error) {
-      return res.status(401).json({ error: error.message });
-    }
-    
-    res.status(401).json({ error: "Failed to refresh token" });
+    console.error("Refresh token error:", error);
+    res.status(500).json({ error: error.message || "Failed to refresh token" });
   }
 };
 
-// Forgot password
-export const forgotPassword: RequestHandler = async (
+/**
+ * 🔐 Password Reset Request
+ */
+export const passwordReset: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const validatedData = forgotPasswordSchema.parse(req.body);
+    const validatedData = passwordResetRequestSchema.parse(req.body);
     const { email } = validatedData;
 
     const user = await getUserByEmailService(email);
     if (!user) {
-      // Don't reveal that user doesn't exist for security
-      return res
-        .status(200)
-        .json({ message: "If the email exists, a reset link has been sent" });
+      // Don't reveal whether user exists
+      return res.status(200).json({
+        message: "If the email exists, a reset link has been sent",
+      });
+    }
+
+    if (!user.userAuth) {
+      return res.status(400).json({ error: "Authentication data not found" });
     }
 
     // Generate reset token
-    const resetToken = generateResetToken(email);
+    const resetToken = jwt.sign(
+      { userId: user.id, email: user.email, type: "password_reset" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "1h" }
+    );
 
-    // Set token in database
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 1);
+    // Store reset token in database
+    // This would be implemented in your service layer
 
-    await setPasswordResetTokenService(email, resetToken, expiresAt);
+    const resetLink = `http://localhost:5000/api/auth/reset-password/${resetToken}`;
 
-    // Send email
-    const resetLink = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const emailResult = await sendNotificationEmail(
+      email,
+      "Password Reset Request",
+      user.fullName,
+      `Click the link to reset your password: <a href="${resetLink}">Reset Password</a><br><br>
+       This link will expire in 1 hour.`
+    );
 
-    try {
-      await sendNotificationEmail(
-        email,
-        "Password Reset",
-        user.fullName,
-        `Please click <a href="${resetLink}">here</a> to reset your password. This link will expire in 1 hour.`
-      );
-    } catch (emailError) {
-      console.error("Failed to send reset email:", emailError);
+    if (!emailResult) {
+      console.error("Failed to send reset email");
       return res.status(500).json({ error: "Failed to send reset email" });
     }
 
-    res
-      .status(200)
-      .json({ message: "If the email exists, a reset link has been sent" });
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
+    console.log("Password reset email sent successfully to:", email);
+    res.status(200).json({
+      message: "If the email exists, a reset link has been sent",
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: "Validation failed",
+        details: formatZodError(error)
+      });
     }
-    
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(500).json({ error: "Failed to process password reset" });
+    console.error("Password reset error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to process password reset request",
+    });
   }
 };
 
-// Reset password
-export const resetPassword: RequestHandler = async (
+/**
+ * 🔑 Update Password
+ */
+export const updatePassword: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const validatedData = resetPasswordSchema.parse(req.body);
+    const validatedData = passwordResetSchema.parse(req.body);
     const { token, password } = validatedData;
 
-    // Verify token
-    let decoded: JwtPayload;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-    } catch (jwtError) {
-      return res.status(400).json({ error: "Invalid or expired token" });
+    if (!process.env.JWT_SECRET) {
+      throw new Error("JWT_SECRET not configured");
     }
 
-    if (decoded.purpose !== "password_reset") {
-      return res.status(400).json({ error: "Invalid token purpose" });
-    }
-
-    const email = decoded.email as string;
-    if (!email) {
-      return res.status(400).json({ error: "Invalid token" });
-    }
-
-    // Verify token in database
-    const isValid = await verifyResetTokenService(email, token);
-    if (!isValid) {
-      return res.status(400).json({ error: "Invalid or expired token" });
+    // Verify reset token
+    const payload: any = jwt.verify(token, process.env.JWT_SECRET);
+    if (payload.type !== "password_reset") {
+      return res.status(400).json({ error: "Invalid token type" });
     }
 
     // Update password
-    await updateUserPasswordService(email, password);
+    await updateUserPasswordService(payload.email, password);
 
     // Send confirmation email
-    try {
-      const user = await getUserByEmailService(email);
-      if (user) {
-        await sendNotificationEmail(
-          email,
-          "Password Reset Successful",
-          user.fullName,
-          "Your password has been reset successfully. If you didn't request this change, please contact support immediately."
-        );
-      }
-    } catch (emailError) {
-      console.error("Failed to send confirmation email:", emailError);
-      // Continue even if email fails
-    }
+    await sendNotificationEmail(
+      payload.email,
+      "Password Reset Successful",
+      payload.email, // Name would be fetched from user data
+      "Your password has been reset successfully."
+    );
 
-    res.status(200).json({ message: "Password has been reset successfully" });
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
+    // Revoke all existing refresh tokens for security
+    await revokeAllUserRefreshTokensService(payload.userId);
+
+    res.status(200).json({
+      message: "Password has been reset successfully. Please login again.",
+    });
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ 
+        error: "Validation failed",
+        details: formatZodError(error)
+      });
     }
-    
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
+    if (error instanceof jwt.JsonWebTokenError) {
+      return res.status(400).json({ error: "Invalid or expired token" });
     }
-    
-    res.status(500).json({ error: "Failed to reset password" });
+    console.error("Update password error:", error);
+    res.status(500).json({
+      error: error.message || "Failed to reset password",
+    });
   }
 };
 
-// Change password (authenticated)
-export const changePassword: RequestHandler = async (
+/**
+ * 🚪 Logout
+ */
+export const logout: RequestHandler = async (
   req: Request,
   res: Response
 ) => {
   try {
-    const validatedData = changePasswordSchema.parse(req.body);
-    const { currentPassword, newPassword } = validatedData;
-    const userSession = (req as any).user as TUserSession;
+    const { refreshToken } = req.body;
 
-    if (!userSession || !userSession.userId) {
-      return res.status(401).json({ error: "Authentication required" });
+    if (refreshToken) {
+      await revokeRefreshTokenService(refreshToken);
     }
 
-    // Get user with auth info
-    const user = await getUserByIdService(userSession.userId);
-    if (!user || !user.userAuth || user.userAuth.length === 0) {
-      return res.status(404).json({ error: "User not found" });
+    // If no specific token provided, revoke all for the user
+    if (req.user && !refreshToken) {
+      await revokeAllUserRefreshTokensService(req.user.id);
     }
 
-    // Verify current password
-    const userAuth = user.userAuth[0];
-    const isMatch = bcrypt.compareSync(currentPassword, userAuth.passwordHash);
-    if (!isMatch) {
-      return res.status(400).json({ error: "Current password is incorrect" });
-    }
-
-    // Update password
-    await updateUserPasswordService(userSession.email, newPassword);
-
-    // Revoke all refresh tokens (force re-login on other devices)
-    await revokeAllUserRefreshTokensService(userSession.userId);
-
-    // Send confirmation email
-    try {
-      await sendNotificationEmail(
-        userSession.email,
-        "Password Changed",
-        user.fullName,
-        "Your password has been changed successfully. If you didn't make this change, please contact support immediately."
-      );
-    } catch (emailError) {
-      console.error("Failed to send confirmation email:", emailError);
-      // Continue even if email fails
-    }
-
-    res.status(200).json({ message: "Password changed successfully" });
-  } catch (error: unknown) {
-    if (error instanceof ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    
-    if (error instanceof Error) {
-      return res.status(500).json({ error: error.message });
-    }
-    
-    res.status(500).json({ error: "Failed to change password" });
+    res.status(200).json({ message: "Logged out successfully" });
+  } catch (error: any) {
+    console.error("Logout error:", error);
+    res.status(500).json({ error: error.message || "Failed to logout" });
   }
 };
