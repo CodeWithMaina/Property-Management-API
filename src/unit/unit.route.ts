@@ -12,15 +12,19 @@ import {
   markUnitVacant,
   markUnitUnavailable,
 } from "./unit.controller";
+import { AdvancedAuthMiddleware } from "../middleware/AdvancedAuthMiddleware";
 
 export const unitRouter = Router();
+
+// Apply authentication to all unit routes
+unitRouter.use(AdvancedAuthMiddleware.requireAuth());
 
 /**
  * @route GET /units
  * @description Get all units (filterable by property, organization, or status)
  * @access Private
  */
-unitRouter.get("/units", getUnits);
+unitRouter.get("/units",AdvancedAuthMiddleware.requireOrganization(), getUnits);
 
 /**
  * @route POST /units

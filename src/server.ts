@@ -1,8 +1,8 @@
+// server.ts (updated section)
 import express, { Request, Response } from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import { propertyRouter } from "./property/property.route";
-import { unitRouter } from "./unit/unit.route";
 import { userRouter } from "./user/user.route";
 import {organizationRouter} from "./organization/organization.route";
 import leaseRouter from "./lease/lease.route";
@@ -12,7 +12,8 @@ import { errorHandler, notFoundHandler } from "./utils/errorHandler";
 import {propertyManagerRouter} from "./propertyManager/propertyManager.route";
 import { userOrganizationRouter } from "./userOrganization/userOrganization.route";
 import unitAnalyticsRouter from "./unit/unitAnalytics.route";
-import { authRouter } from "./auth/auth.route";
+import authRouter from "./auth/auth.route";
+import unitRouter from "./unit/unit.route";
 
 dotenv.config();
 
@@ -29,15 +30,14 @@ app.use(
   })
 );
 
-// 🔍 Body Parsers (for all other routes)
+// Body Parsers
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// 📦 API Routes - should come after middleware but before error handlers
-app.use('/api', authRouter)
+// API Routes - use enhanced auth routes
+app.use('/api/auth', authRouter) // Changed from authRouter to authEnhancedRouter
 app.use('/api', propertyRouter)
 app.use('/api', propertyManagerRouter)
-app.use('/api', unitRouter)
 app.use('/api', leaseRouter)
 app.use('/api', amenitiesRouter)
 app.use('/api', userRouter)
@@ -45,6 +45,7 @@ app.use('/api', unitAnalyticsRouter)
 app.use('/api', organizationRouter)
 app.use('/api', userOrganizationRouter)
 app.use('/api', invoiceRoutes)
+app.use('/api', unitRouter)
 
 // Health check route
 app.get("/", (req: Request, res: Response) => {
@@ -57,7 +58,7 @@ app.use(notFoundHandler);
 // Error handler should be the VERY LAST middleware
 app.use(errorHandler); 
 
-// 🚀 Start Server
+// Start Server
 app.listen(PORT, () => {
   console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

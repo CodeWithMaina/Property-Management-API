@@ -145,7 +145,7 @@ export const userAuth = pgTable(
     isEmailVerified: boolean("isEmailVerified").notNull().default(false),
     lastLoginAt: timestamp("lastLoginAt", { withTimezone: true }),
     verificationToken: varchar("verificationToken", { length: 255 }),
-    resetToken: varchar("resetToken", { length: 255 }),
+    resetToken: text("resetToken"),
     resetTokenExpiresAt: timestamp("resetTokenExpiresAt", {
       withTimezone: true,
     }),
@@ -1067,9 +1067,9 @@ export const invitesRelations = relations(invites, ({ one }) => ({
 }));
 
 // Organization Relations
-export const organizationsRelations = relations(organizations, ({ many }) => ({
+export const organizationsRelations = relations(organizations, ({ many, one }) => ({
   userOrganizations: many(userOrganizations),
-  organizationSettings: many(organizationSettings),
+  organizationSettings: one(organizationSettings),
   permissionTemplates: many(permissionTemplates),
   properties: many(properties),
   leases: many(leases),

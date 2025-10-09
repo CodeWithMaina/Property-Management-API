@@ -1,5 +1,5 @@
 {
-  "id": "4c362aca-c5d7-46a7-8903-10e435613024",
+  "id": "f196cebb-5ba0-4c50-84c3-f043ac12b463",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3131,7 +3131,7 @@
         },
         "resetToken": {
           "name": "resetToken",
-          "type": "varchar(255)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },

@@ -41,7 +41,8 @@ const hasOrganizationAccess = (userSession: TEnhancedUserSession, organizationId
   }
   
   // Check if user is a member of the organization
-  return userSession.organizations.some(org => 
+  const userOrgs = userSession.organizations || [];
+  return userOrgs.some(org => 
     org.organizationId === organizationId
   );
 };
@@ -49,48 +50,66 @@ const hasOrganizationAccess = (userSession: TEnhancedUserSession, organizationId
 // Helper to check if user has admin role
 const isAdmin = (userSession: TEnhancedUserSession): boolean => {
   return userSession.role === 'admin' || userSession.role === 'superAdmin';
-};
+}
 
+// getOrganizations function
 export const getOrganizations = asyncHandler(
   async (req: Request, res: Response): Promise<void> => {
-    const queryParams = OrganizationQuerySchema.parse(req.query);
-    const userSession = getUserSession(req);
-    
-    console.log("Get Organizations - User session:", {
-      userId: userSession.userId,
-      role: userSession.role,
-      organizations: userSession.organizations.map(org => ({
-        id: org.organizationId,
-        role: org.role
-      }))
-    });
-    
-    // For non-admin users, only show organizations they belong to
-    const userId = isAdmin(userSession) ? undefined : userSession.userId;
-    
-    const result = await getOrganizationsServices(queryParams, userId);
+    try {
+      const queryParams = OrganizationQuerySchema.parse(req.query);
+      const userSession = getUserSession(req);
+      
+      console.log("Get Organizations - Full User session:", JSON.stringify(userSession, null, 2));
+      
+      // Add safety check for organizations array
+      const userOrganizations = userSession.organizations || [];
+      
+      console.log("Get Organizations - User session:", {
+        userId: userSession.userId,
+        role: userSession.role,
+        organizations: userOrganizations.map(org => ({
+          id: org.organizationId,
+          role: org.role
+        }))
+      });
+      
+      // For non-admin users, only show organizations they belong to
+      const userId = isAdmin(userSession) ? undefined : userSession.userId;
+      
+      console.log('Calling getOrganizationsServices with:', { queryParams, userId });
+      
+      const result = await getOrganizationsServices(queryParams, userId);
 
-    const pagination = {
-      total: result.total,
-      count: result.organizations.length,
-      perPage: queryParams.limit,
-      currentPage: queryParams.page,
-      totalPages: Math.ceil(result.total / queryParams.limit),
-      links: {
-        first: null,
-        last: null,
-        prev: null,
-        next: null,
-      },
-    };
+      console.log('Service returned:', { 
+        total: result.total, 
+        count: result.organizations.length 
+      });
 
-    const response = createPaginatedResponse(
-      result.organizations,
-      pagination,
-      "Organizations retrieved successfully"
-    );
+      const pagination = {
+        total: result.total,
+        count: result.organizations.length,
+        perPage: queryParams.limit,
+        currentPage: queryParams.page,
+        totalPages: Math.ceil(result.total / queryParams.limit),
+        links: {
+          first: null,
+          last: null,
+          prev: null,
+          next: null,
+        },
+      };
 
-    res.status(200).json(response);
+      const response = createPaginatedResponse(
+        result.organizations,
+        pagination,
+        "Organizations retrieved successfully"
+      );
+
+      res.status(200).json(response);
+    } catch (error) {
+      console.error('Error in getOrganizations controller:', error);
+      throw error;
+    }
   }
 );
 
@@ -168,8 +187,8 @@ export const updateOrganization = asyncHandler(
     
     // Check if user has permission to update this organization
     if (!isAdmin(userSession)) {
-      // For non-admins, check if they have manager role in this organization
-      const userOrg = userSession.organizations.find(org => 
+      // For non-admins, check if they have appropriate role in this organization
+      const userOrg = userSession.organizations?.find(org => 
         org.organizationId === organizationId && 
         (org.role === 'admin' || org.role === 'manager' || org.role === 'propertyOwner')
       );

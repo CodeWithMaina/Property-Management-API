@@ -1,412 +1,640 @@
-// auth.controller.ts
-import { Request, Response, RequestHandler } from "express";
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
+import { Request, Response } from "express";
 import { z } from "zod";
+import { eq } from "drizzle-orm";
+import db from "../drizzle/db";
+import { users, userAuth } from "../drizzle/schema";
 import {
-  createUserServices,
-  getUserByEmailService,
-  updateUserPasswordService,
-  storeRefreshTokenService,
-  revokeRefreshTokenService,
-  revokeAllUserRefreshTokensService,
-} from "./auth.service";
-import { sendNotificationEmail } from "../middleware/googleMailer";
-import { createUserSchema, loginSchema, passwordResetRequestSchema, passwordResetSchema, refreshTokenSchema } from "./auth.schema";
-import { TUserWithAuth } from "./auth.types";
+  createSuccessResponse,
+  createErrorResponse,
+} from "../utils/apiResponse/apiResponse.types";
 import { formatZodError } from "../utils/formatZodError";
+import { PasswordService } from "./PasswordService";
+import { AuthCoreService } from "./auth.service";
 
-/**
- * 🎯 Helper function to verify password with proper typing
- */
-const verifyPassword = (password: string, user: TUserWithAuth): boolean => {
-  if (!user.userAuth?.passwordHash) {
-    return false;
+const enhancedLoginSchema = z.object({
+  email: z.string().email("Invalid email format"),
+  password: z.string().min(1, "Password is required"),
+  deviceId: z.string().optional(),
+  userAgent: z.string().optional(),
+  mfaToken: z.string().optional(),
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: z.string().min(8, "New password must be at least 8 characters"),
+});
+
+const verifyEmailSchema = z.object({
+  token: z.string().min(1, "Verification token is required"),
+});
+
+const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, "Refresh token is required"),
+});
+
+const passwordResetRequestSchema = z.object({
+  email: z.string().email("Invalid email format"),
+});
+
+const passwordResetSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+const createUserSchema = z.object({
+  fullName: z
+    .string()
+    .min(1, "Full name is required")
+    .max(255, "Full name too long"),
+  email: z.string().email("Invalid email format").max(319, "Email too long"),
+  phone: z.string().max(63, "Phone number too long").optional(),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  organizationId: z.string().uuid("Invalid organization ID").optional(), // Changed from organizationName
+  role: z
+    .enum([
+      "tenant",
+      "caretaker",
+      "manager",
+      "propertyOwner",
+      "admin",
+      "superAdmin",
+    ])
+    .optional()
+    .default("tenant"),
+});
+
+export class AuthEnhancedController {
+  private authService: AuthCoreService;
+  private passwordService: PasswordService;
+
+  constructor() {
+    this.authService = new AuthCoreService();
+    this.passwordService = new PasswordService();
   }
-  return bcrypt.compareSync(password, user.userAuth.passwordHash);
-};
 
-/**
- * 🆕 User Registration
- */
-export const createUser: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    // Validate input
-    const validatedData = createUserSchema.parse(req.body);
-    const userEmail = validatedData.email;
+  async register(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = createUserSchema.parse(req.body);
 
-    // Check for existing user
-    const existingUser = await getUserByEmailService(userEmail);
-    if (existingUser) {
-      return res
-        .status(400)
-        .json({ error: "User with this email already exists" });
-    }
+      const result = await this.authService.registerUser(validatedData);
 
-    // Create user and organization
-    const { user, organization } = await createUserServices(validatedData);
-
-    // Send welcome email
-    const emailResult = await sendNotificationEmail(
-      validatedData.email,
-      validatedData.fullName,
-      "Account created successfully",
-      "Welcome to our property management system!</b>"
-    );
-
-    if (!emailResult) {
-      console.error("Failed to send notification email");
-    }
-
-    res.status(201).json({
-      message: "User created successfully",
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-      },
-      organization: organization
-        ? {
-            id: organization.id,
-            name: organization.name,
-          }
-        : null,
-    });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: formatZodError(error)
+      // Generate tokens for the new user
+      const tokens = await this.authService.login({
+        email: validatedData.email,
+        password: validatedData.password,
+        deviceId: "registration",
+        userAgent: req.headers["user-agent"],
       });
+
+      const response = createSuccessResponse(
+        {
+          user: {
+            id: result.user.id,
+            fullName: result.user.fullName,
+            email: result.user.email,
+            phone: result.user.phone,
+            organizations: result.organization
+              ? [
+                  {
+                    id: result.organization.id,
+                    role: "admin", // First user becomes admin
+                    permissions: result.organization.permissions,
+                    isPrimary: true,
+                    organization: {
+                      id: result.organization.id,
+                      name: result.organization.name,
+                      legalName: result.organization.legalName,
+                    },
+                  },
+                ]
+              : [],
+          },
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
+          tokenType: tokens.tokenType,
+        },
+        "User created successfully"
+      );
+
+      res.status(201).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Create user error:", error);
+
+      // Handle specific error cases
+      let errorMessage = "Failed to create user";
+      let errorCode = "REGISTRATION_ERROR";
+
+      if (error.message.includes("already exists")) {
+        errorMessage = error.message;
+        errorCode = "USER_ALREADY_EXISTS";
+      } else if (error.message.includes("Password validation failed")) {
+        errorMessage = error.message;
+        errorCode = "PASSWORD_POLICY_ERROR";
+      } else if (error.code === "23505") {
+        errorMessage = "Organization name already exists";
+        errorCode = "ORGANIZATION_EXISTS";
+      }
+
+      res.status(400).json(createErrorResponse(errorMessage, errorCode));
     }
-    console.error("Create user error:", error);
-    res.status(500).json({ error: error.message || "Failed to create user" });
   }
-};
 
-/**
- * 🔑 User Login
- */
-export const loginUser: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const validatedData = loginSchema.parse(req.body);
-    const { email, password, deviceId, userAgent } = validatedData;
+  async login(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = enhancedLoginSchema.parse(req.body);
 
-    // Get user with auth data
-    const user = await getUserByEmailService(email);
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
+      const tokens = await this.authService.login(validatedData);
 
-    if (!user.isActive) {
-      return res.status(401).json({ error: "Account deactivated" });
-    }
-
-    if (!user.userAuth) {
-      return res.status(401).json({ error: "Authentication data not found" });
-    }
-
-    // Verify password using helper function
-    const isPasswordValid = verifyPassword(password, user);
-    if (!isPasswordValid) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Check email verification
-    // if (!user.userAuth.isEmailVerified) {
-    //   return res.status(403).json({
-    //     error: "Email verification required",
-    //     requiresVerification: true,
-    //   });
-    // }
-
-    // Get user's organizations and permissions
-    const userOrgs = user.userOrganizations || [];
-    const primaryOrg = userOrgs.find((org) => org.isPrimary);
-
-    // Generate access token
-    const accessTokenPayload = {
-      userId: user.id,
-      email: user.email,
-      orgId: primaryOrg?.organizationId,
-      roles: userOrgs.map((org) => org.role),
-      permissions: primaryOrg?.permissions || {},
-      deviceId,
-    };
-
-    const accessToken = jwt.sign(
-      accessTokenPayload,
-      process.env.JWT_SECRET as string,
-      { expiresIn: "15m" } // Short-lived access token
-    );
-
-    // Generate refresh token
-    const refreshToken = jwt.sign(
-      { userId: user.id, deviceId },
-      process.env.JWT_REFRESH_SECRET as string,
-      { expiresIn: "30d" }
-    );
-
-    // Store refresh token
-    await storeRefreshTokenService(
-      user.id,
-      refreshToken,
-      deviceId,
-      userAgent,
-      req.ip
-    );
-
-    // Update last login
-    // This would be implemented in your service layer
-
-    res.status(200).json({
-      accessToken,
-      refreshToken,
-      user: {
-        id: user.id,
-        fullName: user.fullName,
-        email: user.email,
-        organizations: userOrgs.map((org) => ({
-          id: org.organizationId,
-          role: org.role,
-          isPrimary: org.isPrimary,
-          permissions: org.permissions,
-        })),
-      },
-      expiresIn: 15 * 60, // 15 minutes in seconds
-    });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: formatZodError(error)
+      // Get user data to include in response
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, (tokens as any).userId), // The userId should be returned from authService.login
+        with: {
+          userOrganizations: {
+            with: {
+              organization: true,
+            },
+          },
+        },
       });
+
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      const response = createSuccessResponse(
+        {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
+          tokenType: tokens.tokenType,
+          // ✅ ADD USER DATA
+          user: {
+            id: user.id,
+            fullName: user.fullName,
+            email: user.email,
+            phone: user.phone,
+            avatarUrl: user.avatarUrl,
+            isActive: user.isActive,
+            organizations:
+              user.userOrganizations?.map((org: any) => ({
+                id: org.organizationId,
+                role: org.role,
+                permissions: org.permissions,
+                isPrimary: org.isPrimary,
+                organization: {
+                  id: org.organization?.id,
+                  name: org.organization?.name,
+                  legalName: org.organization?.legalName,
+                },
+              })) || [],
+          },
+        },
+        "Login successful"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Login error:", error);
+
+      const statusCode =
+        error.message.includes("Invalid credentials") ||
+        error.message.includes("Account deactivated")
+          ? 401
+          : 500;
+
+      res
+        .status(statusCode)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to login",
+            "AUTHENTICATION_ERROR"
+          )
+        );
     }
-    console.error("Login error:", error);
-    res.status(500).json({ error: error.message || "Failed to login" });
   }
-};
 
-/**
- * 🔄 Refresh Access Token
- */
-export const refreshToken: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const validatedData = refreshTokenSchema.parse(req.body);
-    const { refreshToken, deviceId } = validatedData;
+  async refresh(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = refreshTokenSchema.parse(req.body);
 
-    // Verify refresh token (middleware already validated it)
-    if (!req.user) {
-      return res.status(401).json({ error: "Invalid refresh token" });
+      const tokens = await this.authService.refreshTokens(
+        validatedData.refreshToken
+      );
+
+      const response = createSuccessResponse(
+        {
+          accessToken: tokens.accessToken,
+          refreshToken: tokens.refreshToken,
+          expiresIn: tokens.expiresIn,
+        },
+        "Token refreshed successfully"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Refresh token error:", error);
+      res
+        .status(401)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to refresh token",
+            "TOKEN_ERROR"
+          )
+        );
     }
+  }
 
-    const user = req.user;
+  async logout(req: Request, res: Response): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      const { deviceId } = req.body;
 
-    // Generate new access token
-    const userOrgs = user.userOrganizations || [];
-    const primaryOrg = userOrgs.find((org) => org.isPrimary);
+      if (!userId) {
+        res
+          .status(401)
+          .json(
+            createErrorResponse(
+              "Authentication required",
+              "AUTHENTICATION_ERROR"
+            )
+          );
+        return;
+      }
 
-    const accessTokenPayload = {
-      userId: user.id,
-      email: user.email,
-      orgId: primaryOrg?.organizationId,
-      roles: userOrgs.map((org) => org.role),
-      permissions: primaryOrg?.permissions || {},
-      deviceId,
-    };
+      await this.authService.logout(userId, deviceId);
 
-    const newAccessToken = jwt.sign(
-      accessTokenPayload,
-      process.env.JWT_SECRET as string,
-      { expiresIn: "15m" }
-    );
+      const response = createSuccessResponse(null, "Logged out successfully");
 
-    // Optionally rotate refresh token for security
-    const newRefreshToken = jwt.sign(
-      { userId: user.id, deviceId },
-      process.env.JWT_REFRESH_SECRET as string,
-      { expiresIn: "30d" }
-    );
+      res.status(200).json(response);
+    } catch (error: any) {
+      console.error("Logout error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to logout",
+            "LOGOUT_ERROR"
+          )
+        );
+    }
+  }
 
-    // Store new refresh token and revoke old one
-    await storeRefreshTokenService(
-      user.id,
-      newRefreshToken,
-      deviceId,
-      req.get("User-Agent"),
-      req.ip
-    );
-    await revokeRefreshTokenService(refreshToken);
+  async verifyEmail(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = verifyEmailSchema.parse(req.body);
 
-    res.status(200).json({
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken,
-      expiresIn: 15 * 60,
-    });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: formatZodError(error)
+      const success = await this.authService.verifyEmail(validatedData.token);
+
+      if (success) {
+        const response = createSuccessResponse(
+          null,
+          "Email verified successfully"
+        );
+        res.status(200).json(response);
+      } else {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Invalid or expired verification token",
+              "VERIFICATION_ERROR"
+            )
+          );
+      }
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Email verification error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to verify email",
+            "VERIFICATION_ERROR"
+          )
+        );
+    }
+  }
+
+  async requestPasswordReset(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = passwordResetRequestSchema.parse(req.body);
+
+      await this.authService.requestPasswordReset(validatedData.email);
+
+      // Always return success to prevent email enumeration
+      const response = createSuccessResponse(
+        null,
+        "If the email exists, a reset link has been sent"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Password reset request error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            "Failed to process password reset request",
+            "PASSWORD_RESET_ERROR"
+          )
+        );
+    }
+  }
+
+  async resetPassword(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = passwordResetSchema.parse(req.body);
+
+      await this.authService.resetPassword(validatedData);
+
+      const response = createSuccessResponse(
+        null,
+        "Password has been reset successfully. Please login again."
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Password reset error:", error);
+
+      const statusCode =
+        error.message.includes("Invalid reset token") ||
+        error.message.includes("Password validation failed")
+          ? 400
+          : 500;
+
+      res
+        .status(statusCode)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to reset password",
+            "PASSWORD_RESET_ERROR"
+          )
+        );
+    }
+  }
+
+  async changePassword(req: Request, res: Response): Promise<void> {
+    try {
+      const validatedData = changePasswordSchema.parse(req.body);
+      const userId = (req as any).user?.userId;
+
+      if (!userId) {
+        res
+          .status(401)
+          .json(
+            createErrorResponse(
+              "Authentication required",
+              "AUTHENTICATION_ERROR"
+            )
+          );
+        return;
+      }
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        with: {
+          userAuth: true,
+        },
       });
+
+      if (!user || !user.userAuth || user.userAuth.length === 0) {
+        res
+          .status(404)
+          .json(createErrorResponse("User not found", "USER_NOT_FOUND"));
+        return;
+      }
+
+      const userAuthRecord = user.userAuth[0];
+
+      const isCurrentPasswordValid =
+        await this.passwordService.validatePassword(
+          validatedData.currentPassword,
+          userAuthRecord.passwordHash
+        );
+
+      if (!isCurrentPasswordValid) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Current password is incorrect",
+              "PASSWORD_MISMATCH"
+            )
+          );
+        return;
+      }
+
+      const passwordValidation = this.passwordService.validatePasswordPolicy(
+        validatedData.newPassword
+      );
+      if (!passwordValidation.isValid) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              `Password validation failed: ${passwordValidation.errors.join(
+                ", "
+              )}`,
+              "PASSWORD_POLICY_ERROR"
+            )
+          );
+        return;
+      }
+
+      const hashedPassword = await this.passwordService.hashPassword(
+        validatedData.newPassword
+      );
+
+      await db
+        .update(userAuth)
+        .set({
+          passwordHash: hashedPassword,
+        })
+        .where(eq(userAuth.userId, userId));
+
+      await this.authService.logout(userId);
+
+      const response = createSuccessResponse(
+        null,
+        "Password changed successfully. Please login again."
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        res
+          .status(400)
+          .json(
+            createErrorResponse(
+              "Validation failed",
+              "VALIDATION_ERROR",
+              formatZodError(error)
+            )
+          );
+        return;
+      }
+
+      console.error("Change password error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to change password",
+            "PASSWORD_CHANGE_ERROR"
+          )
+        );
     }
-    console.error("Refresh token error:", error);
-    res.status(500).json({ error: error.message || "Failed to refresh token" });
   }
-};
 
-/**
- * 🔐 Password Reset Request
- */
-export const passwordReset: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const validatedData = passwordResetRequestSchema.parse(req.body);
-    const { email } = validatedData;
+  async getCurrentUser(req: Request, res: Response): Promise<void> {
+    try {
+      const userContext = (req as any).user;
 
-    const user = await getUserByEmailService(email);
-    if (!user) {
-      // Don't reveal whether user exists
-      return res.status(200).json({
-        message: "If the email exists, a reset link has been sent",
+      if (!userContext) {
+        res
+          .status(401)
+          .json(
+            createErrorResponse(
+              "Authentication required",
+              "AUTHENTICATION_ERROR"
+            )
+          );
+        return;
+      }
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userContext.userId),
+        with: {
+          userOrganizations: {
+            with: {
+              organization: true,
+            },
+          },
+        },
       });
+
+      if (!user) {
+        res
+          .status(404)
+          .json(createErrorResponse("User not found", "USER_NOT_FOUND"));
+        return;
+      }
+
+      const response = createSuccessResponse(
+        {
+          user: {
+            id: user.id,
+            fullName: user.fullName,
+            email: user.email,
+            phone: user.phone,
+            avatarUrl: user.avatarUrl,
+            isActive: user.isActive,
+          },
+          organizations:
+            user.userOrganizations?.map((org: any) => ({
+              id: org.organizationId,
+              role: org.role,
+              permissions: org.permissions,
+              isPrimary: org.isPrimary,
+              organization: {
+                id: org.organization?.id,
+                name: org.organization?.name,
+                legalName: org.organization?.legalName,
+              },
+            })) || [],
+        },
+        "User data retrieved successfully"
+      );
+
+      res.status(200).json(response);
+    } catch (error: any) {
+      console.error("Get current user error:", error);
+      res
+        .status(500)
+        .json(
+          createErrorResponse(
+            error.message || "Failed to get user data",
+            "USER_DATA_ERROR"
+          )
+        );
     }
-
-    if (!user.userAuth) {
-      return res.status(400).json({ error: "Authentication data not found" });
-    }
-
-    // Generate reset token
-    const resetToken = jwt.sign(
-      { userId: user.id, email: user.email, type: "password_reset" },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "1h" }
-    );
-
-    // Store reset token in database
-    // This would be implemented in your service layer
-
-    const resetLink = `http://localhost:5000/api/auth/reset-password/${resetToken}`;
-
-    const emailResult = await sendNotificationEmail(
-      email,
-      "Password Reset Request",
-      user.fullName,
-      `Click the link to reset your password: <a href="${resetLink}">Reset Password</a><br><br>
-       This link will expire in 1 hour.`
-    );
-
-    if (!emailResult) {
-      console.error("Failed to send reset email");
-      return res.status(500).json({ error: "Failed to send reset email" });
-    }
-
-    console.log("Password reset email sent successfully to:", email);
-    res.status(200).json({
-      message: "If the email exists, a reset link has been sent",
-    });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: formatZodError(error)
-      });
-    }
-    console.error("Password reset error:", error);
-    res.status(500).json({
-      error: error.message || "Failed to process password reset request",
-    });
   }
-};
-
-/**
- * 🔑 Update Password
- */
-export const updatePassword: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const validatedData = passwordResetSchema.parse(req.body);
-    const { token, password } = validatedData;
-
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET not configured");
-    }
-
-    // Verify reset token
-    const payload: any = jwt.verify(token, process.env.JWT_SECRET);
-    if (payload.type !== "password_reset") {
-      return res.status(400).json({ error: "Invalid token type" });
-    }
-
-    // Update password
-    await updateUserPasswordService(payload.email, password);
-
-    // Send confirmation email
-    await sendNotificationEmail(
-      payload.email,
-      "Password Reset Successful",
-      payload.email, // Name would be fetched from user data
-      "Your password has been reset successfully."
-    );
-
-    // Revoke all existing refresh tokens for security
-    await revokeAllUserRefreshTokensService(payload.userId);
-
-    res.status(200).json({
-      message: "Password has been reset successfully. Please login again.",
-    });
-  } catch (error: any) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ 
-        error: "Validation failed",
-        details: formatZodError(error)
-      });
-    }
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(400).json({ error: "Invalid or expired token" });
-    }
-    console.error("Update password error:", error);
-    res.status(500).json({
-      error: error.message || "Failed to reset password",
-    });
-  }
-};
-
-/**
- * 🚪 Logout
- */
-export const logout: RequestHandler = async (
-  req: Request,
-  res: Response
-) => {
-  try {
-    const { refreshToken } = req.body;
-
-    if (refreshToken) {
-      await revokeRefreshTokenService(refreshToken);
-    }
-
-    // If no specific token provided, revoke all for the user
-    if (req.user && !refreshToken) {
-      await revokeAllUserRefreshTokensService(req.user.id);
-    }
-
-    res.status(200).json({ message: "Logged out successfully" });
-  } catch (error: any) {
-    console.error("Logout error:", error);
-    res.status(500).json({ error: error.message || "Failed to logout" });
-  }
-};
+}

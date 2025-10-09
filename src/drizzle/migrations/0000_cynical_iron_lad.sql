@@ -286,7 +286,7 @@ CREATE TABLE "userAuth" (
 	"isEmailVerified" boolean DEFAULT false NOT NULL,
 	"lastLoginAt" timestamp with time zone,
 	"verificationToken" varchar(255),
-	"resetToken" varchar(255),
+	"resetToken" text,
 	"resetTokenExpiresAt" timestamp with time zone,
 	"mfaSecret" varchar(255),
 	"mfaEnabled" boolean DEFAULT false NOT NULL,

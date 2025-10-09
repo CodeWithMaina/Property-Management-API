@@ -7,7 +7,7 @@ import {
   propertyManagers,
   organizations,
   userAuth,
-  UserRoleEnum,
+  UserRole,
   User,
   UserOrganization,
   invites,
@@ -32,6 +32,7 @@ import {
 import { ActivityAction } from "../activityLog/activity.helper";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
+import { UserContext } from "../auth/auth.types";
 
 /**
  * Get all users with optional filtering and pagination
@@ -127,34 +128,41 @@ export const getUsersService = async (
 /**
  * Get user by ID with detailed information
  */
-export const getUserByIdService = async (
-  userId: string
-): Promise<UserResponse> => {
+export const getUserByIdService = async (userId: string): Promise<UserContext | null> => {
   try {
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
       with: {
+        userAuth: true,
         userOrganizations: {
           with: {
             organization: true,
-          },
-        },
-        propertyManagers: {
-          with: {
-            property: true,
           },
         },
       },
     });
 
     if (!user) {
-      throw new NotFoundError("User");
+      return null;
     }
 
-    return user;
+    const userOrgs = user.userOrganizations || [];
+    const primaryOrg = userOrgs.find((org) => org.isPrimary);
+
+    const userContext: UserContext = {
+      userId: user.id,
+      email: user.email,
+      fullName: user.fullName,
+      roles: userOrgs.map((org) => org.role),
+      permissions: primaryOrg?.permissions || {},
+      organizationId: primaryOrg?.organizationId,
+      isActive: user.isActive,
+    };
+
+    return userContext;
   } catch (error) {
-    if (error instanceof NotFoundError) throw error;
-    throw new DatabaseError("Failed to fetch user");
+    console.error('Error in getUserByIdService:', error);
+    throw error;
   }
 };
 
@@ -233,6 +241,10 @@ export const updateUserService = async (
   try {
     const existingUser = await getUserByIdService(userId);
 
+    if (!existingUser) {
+      throw new NotFoundError("User");
+    }
+
     // If email is being updated, check if it's unique
     if (userData.email && userData.email !== existingUser.email) {
       const userWithEmail = await getUserByEmailService(userData.email);
@@ -293,6 +305,11 @@ export const deleteUserService = async (
 
     // Delete the user
     await db.delete(users).where(eq(users.id, userId));
+
+    //Check if user exists
+    if (!existingUser) {
+      throw new NotFoundError("User");
+    }
 
     // Log activity
     if (actorUserId) {
@@ -494,7 +511,7 @@ export const inviteUserService = async (
       await db.insert(invites).values({
         email,
         organizationId,
-        role: role as UserRoleEnum,
+        role: role as UserRole,
         invitedByUserId, // Use the resolved value
         token: inviteToken,
         expiresAt,
@@ -516,7 +533,7 @@ export const inviteUserService = async (
     await db.insert(invites).values({
       email,
       organizationId,
-      role: role as UserRoleEnum,
+      role: role as UserRole,
       invitedByUserId: invitedBy || actorUserId, // Use provided invitedBy or fallback to actor
       token: inviteToken,
       expiresAt,

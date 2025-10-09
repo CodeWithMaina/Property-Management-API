@@ -1,5 +1,5 @@
 // organization.types.ts
-import { Organization as OrgType, Property } from "../drizzle/schema";
+import { OrganizationSettings, Organization as OrgType, Property } from "../drizzle/schema";
 
 export interface OrganizationWithRelations extends OrgType {
   userOrganizations: {
@@ -17,6 +17,7 @@ export interface OrganizationWithRelations extends OrgType {
     };
   }[];
   properties: Pick<Property, 'id' | 'name' | 'isActive'>[];
+  organizationSettings?: OrganizationSettings; // Add this line
 }
 
 export interface PaginationResult<T> {

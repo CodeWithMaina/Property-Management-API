@@ -1,7 +1,6 @@
 // types/api-response.ts
 
-import { MaintenanceStatusEnum, PriorityEnum, unitAmenities, UnitAmenity } from './../../drizzle/schema';
-import { ActivityLog, UnitStatusEnum } from "../../drizzle/schema";
+import { ActivityLog, MaintenanceStatus, Priority, UnitAmenity } from "../../drizzle/schema";
 import { Amenity, Invoice, InvoiceItem, Lease, MaintenanceAttachment, MaintenanceComment, MaintenanceRequest, Organization, Payment, PaymentAllocation, Property, PropertyManager, Receipt, Unit, User, UserOrganization } from "../../drizzle/schema";
 
 /**
@@ -87,6 +86,51 @@ export interface MetaData {
   [key: string]: unknown;
 }
 
+export function createSuccessResponse<T>(data: T, message: string | null = null): ApiResponse<T> {
+  return {
+    success: true,
+    data,
+    message,
+    errorCode: null,
+    errors: null,
+    meta: null,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+export function createErrorResponse(
+  message: string, 
+  errorCode: string, 
+  errors: ValidationError[] | null = null,
+  meta: MetaData | null = null
+): ApiResponse {
+  return {
+    success: false,
+    data: null,
+    message,
+    errorCode,
+    errors,
+    meta,
+    timestamp: new Date().toISOString(),
+  };
+}
+
+// Helper function for creating validation error responses
+export function createValidationErrorResponse(
+  validationErrors: ValidationError[],
+  message: string = "Validation failed"
+): ApiResponse {
+  return createErrorResponse(message, "VALIDATION_ERROR", validationErrors);
+}
+
+// Helper function for creating simple error responses
+export function createSimpleErrorResponse(
+  message: string,
+  errorCode: string = "ERROR"
+): ApiResponse {
+  return createErrorResponse(message, errorCode, null, null);
+}
+
 // Entity-specific response types for better type safety
 export interface UserResponse extends User {
   organizations?: UserOrganization[];
@@ -139,8 +183,8 @@ export interface MaintenanceRequestResponse {
   assignedToUserId?: string | null;
   title: string;
   description?: string | null;
-  status: MaintenanceStatusEnum;
-  priority: PriorityEnum;
+  status: MaintenanceStatus;
+  priority: Priority;
   scheduledAt?: Date | null;
   resolvedAt?: Date | null;
   costAmount?: string | null;

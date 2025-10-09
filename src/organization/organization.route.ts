@@ -1,4 +1,4 @@
-// organization.route.ts
+// organization.route.ts - Fix route definitions
 import { Router } from "express";
 import {
   getOrganizations,
@@ -41,7 +41,7 @@ organizationRouter.get("/organizations/:id", requireOrganizationAccess(), getOrg
  * @description Update organization information
  * @access Private (Admin/SuperAdmin or Organization Manager/Owner)
  */
-organizationRouter.put("/organizations/:id", requireOrganizationAccess('manager'), updateOrganization);
+organizationRouter.put("/organizations/:id", requireOrganizationAccess(), updateOrganization);
 
 /**
  * @route DELETE /organizations/:id
